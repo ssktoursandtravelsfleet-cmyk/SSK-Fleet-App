@@ -1,0 +1,44 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Poppins", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-primary-blue: #1E88E5;
+  --color-dark-blue: #0D47A1;
+  --color-brand-green: #00C853;
+  --color-bg-gray: #F5F7FA;
+  --color-text-charcoal: #333333;
+  --color-accent-gold: #D5A144;
+}
+
+/* Base resets or utility classes if needed */
+body {
+  font-family: var(--font-sans);
+  background-color: #F5F7FA;
+  color: #333333;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.dark body {
+  background-color: #0B132B;
+  color: #F1F5F9;
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
+.no-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+

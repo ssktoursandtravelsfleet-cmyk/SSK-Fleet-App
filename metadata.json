@@ -1,0 +1,6 @@
+{
+  "name": "SSK Fleet",
+  "description": "Premium mobile driver partner companion app for SSK Tours & Travels, featuring Ola, Uber, and Rapido earnings integration, compliance document status tracking, and profile management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
