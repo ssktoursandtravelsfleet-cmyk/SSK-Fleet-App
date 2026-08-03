@@ -1571,8 +1571,9 @@ export async function authenticateDriverWithSheet(
           console.log(`Password Found: ${passwordFound}`);
           console.log(`Entered Password: ${enteredPassword}`);
 
-          if (status.toLowerCase() !== "active") {
-            console.log("Your account is inactive. Please contact the administrator.");
+          const blockedStatuses = ["blocked", "disabled", "deleted"];
+          if (blockedStatuses.includes(status.toLowerCase())) {
+            console.log(`[AUTH DEBUG] Admin account status is blocked/disabled ("${status}")`);
             return { success: false, error: "inactive" };
           }
 
@@ -1708,8 +1709,9 @@ export async function authenticateDriverWithSheet(
         ? String(foundMobileRow[statusIndex]).trim()
         : "Active";
 
-    if (rowStatus.toLowerCase() !== "active") {
-      console.log(`[AUTH DEBUG] Status is not Active ("${rowStatus}")`);
+    const blockedStatuses = ["blocked", "disabled", "deleted"];
+    if (blockedStatuses.includes(rowStatus.toLowerCase())) {
+      console.log(`[AUTH DEBUG] Account status is blocked/disabled ("${rowStatus}")`);
       return { success: false, error: "inactive" };
     }
 

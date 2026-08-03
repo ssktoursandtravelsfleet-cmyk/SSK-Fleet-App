@@ -12,7 +12,8 @@ import {
   UserCheck,
   CheckCircle2,
   X,
-  Menu
+  Menu,
+  Info
 } from "lucide-react";
 import { DriverDetails, NotificationItem, VehicleDocument, TransactionItem } from "../types";
 import { mockVehicleDetails } from "../data";
@@ -306,10 +307,25 @@ export default function DashboardScreen({
         </div>
       </div>
 
-      {/* Main Stats Scroll Area wrapped in PullToRefresh */}
+      {/* PullToRefresh Wrapper */}
       <PullToRefresh onRefresh={onRefresh} syncState={syncState}>
         <div className="px-4 pt-2 pb-24 flex-1">
         
+        {/* Inactive Account Information Banner */}
+        {(driver.Status || driver.status || "").trim().toLowerCase() === "inactive" && (
+          <div className="mb-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-900/60 rounded-2xl p-3 flex items-center gap-3 shadow-xs">
+            <div className="w-8 h-8 bg-amber-100 dark:bg-amber-900/60 rounded-xl flex items-center justify-center text-amber-700 dark:text-amber-300 shrink-0">
+              <Info className="w-4.5 h-4.5" />
+            </div>
+            <div className="flex-1">
+              <p className="text-xs font-extrabold text-amber-900 dark:text-amber-200">Account Notice</p>
+              <p className="text-[11px] text-amber-700 dark:text-amber-300 leading-snug font-semibold">
+                Your account is currently inactive, but you can continue using the app.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Compliance Warning Badge */}
         {warningDocs.length > 0 && (
           <div className="mb-4 bg-rose-50 border border-rose-100 rounded-2xl p-3 flex items-start justify-between shadow-xs">

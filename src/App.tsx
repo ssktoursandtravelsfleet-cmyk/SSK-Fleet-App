@@ -501,6 +501,16 @@ export default function App() {
           "success"
         );
 
+        if ((driverData.Status || "").toLowerCase() === "inactive" || (updatedDriver.status || "").toLowerCase() === "inactive") {
+          setTimeout(() => {
+            triggerPushNotification(
+              "Account Notice ℹ️",
+              "Your account is currently inactive, but you can continue using the app.",
+              "warning"
+            );
+          }, 800);
+        }
+
         if (userRole === "admin") {
           setActiveScreen(ActiveScreen.ADMIN_PANEL);
         } else {
@@ -512,7 +522,7 @@ export default function App() {
         if (authRes.error === "not_found") {
           throw new Error("Mobile number not found in system. Please check your mobile number.");
         } else if (authRes.error === "inactive") {
-          throw new Error("Your account is inactive. Please contact the administrator.");
+          throw new Error("Your account is blocked or disabled. Please contact the administrator.");
         } else if (authRes.error === "admin_invalid_password") {
           throw new Error("Invalid Admin Password");
         } else if (authRes.error === "invalid") {
