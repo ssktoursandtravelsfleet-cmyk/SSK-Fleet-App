@@ -1,6 +1,6 @@
-import React, { useState } from "react";
-import { Wallet, Menu, Info, CreditCard, Clock, CheckCircle, AlertTriangle, Calendar, Loader2, X } from "lucide-react";
-import { PaymentRecord } from "../types";
+import React, { useState, useEffect } from "react";
+import { Wallet, Menu, Info, CreditCard, Clock, CheckCircle, AlertTriangle, Calendar, Loader2, X, QrCode, Copy, User } from "lucide-react";
+import { PaymentRecord, DriverDetails } from "../types";
 import PullToRefresh from "./PullToRefresh";
 
 interface PaymentScreenProps {
@@ -12,6 +12,12 @@ interface PaymentScreenProps {
   triggerNotification: (title: string, message: string, type: "success" | "warning" | "info") => void;
   onSubmitPayment: (paymentType: string, amount: number) => Promise<boolean>;
   loggedMobile: string;
+  driver?: DriverDetails;
+  initialPaymentData?: {
+    paymentType: string;
+    amount: number;
+  } | null;
+  onClearInitialPaymentData?: () => void;
 }
 
 export default function PaymentScreen({
@@ -23,12 +29,19 @@ export default function PaymentScreen({
   triggerNotification,
   onSubmitPayment,
   loggedMobile,
+  driver,
+  initialPaymentData,
+  onClearInitialPaymentData,
 }: PaymentScreenProps) {
-  // Convert amount into numeric value as requested:
+  // Convert amount into numeric value:
   const amount = Number(
     String(outstandingAmount !== undefined ? outstandingAmount : 0)
       .replace(/[₹,\s]/g, "")
   );
+
+  const driverName = driver?.name || driver?.Driver_Name || driver?.Name || "Fleet Driver";
+  const driverEtm = driver?.etm || (driver as any)?.etmId || (driver as any)?.ETM || "N/A";
+  const mobileNo = loggedMobile || driver?.phone || "N/A";
 
   let bannerTitle = "";
   let bannerMessage = "";
@@ -68,16 +81,10 @@ export default function PaymentScreen({
     bannerIconColorClass = "text-emerald-600";
   }
 
-  // Debugging logs as requested:
-  console.log("Raw amount:", outstandingAmount);
-  console.log("Parsed amount:", amount);
-  console.log("Payment status:", statusLabel);
-
   // Helper to parse date/time to milliseconds for accurate sorting
   const parseDateTime = (dtStr: string): number => {
     if (!dtStr) return 0;
     const clean = dtStr.trim();
-    // Match "DD/MM/YYYY HH:MM AM/PM"
     const dmyMatch = clean.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})\s+(AM|PM)$/i);
     if (dmyMatch) {
       const day = parseInt(dmyMatch[1]);
@@ -103,16 +110,34 @@ export default function PaymentScreen({
 
   // Modal State for Payment Submission
   const [modalOpen, setModalOpen] = useState(false);
-  const [modalType, setModalType] = useState<"Rent" | "Dues">("Rent");
+  const [qrModalOpen, setQrModalOpen] = useState(false);
+  const [paymentType, setPaymentType] = useState<string>("Current Outstanding");
+  const [enteredAmount, setEnteredAmount] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Sync initialPaymentData when passed from Dashboard
+  useEffect(() => {
+    if (initialPaymentData) {
+      if (initialPaymentData.paymentType) {
+        setPaymentType(initialPaymentData.paymentType);
+      }
+      if (initialPaymentData.amount !== undefined) {
+        setEnteredAmount(String(initialPaymentData.amount));
+      }
+      setModalOpen(true);
+    } else {
+      setEnteredAmount(String(Math.abs(amount)));
+    }
+  }, [initialPaymentData, outstandingAmount]);
+
   const handlePayRent = () => {
-    setModalType("Rent");
+    setPaymentType("Weekly Rent");
+    setEnteredAmount(String(Math.abs(amount) || 0));
     setModalOpen(true);
   };
 
   const handlePayDues = () => {
-    if (amount >= 0) {
+    if (amount >= 0 && !initialPaymentData) {
       triggerNotification(
         "No Outstanding Dues 🌿",
         "Your account is completely up to date. No payment is required.",
@@ -120,29 +145,44 @@ export default function PaymentScreen({
       );
       return;
     }
-    setModalType("Dues");
+    setPaymentType("Current Outstanding");
+    setEnteredAmount(String(Math.abs(amount) || 0));
     setModalOpen(true);
   };
 
+  const handleCloseModal = () => {
+    if (isSubmitting) return;
+    setModalOpen(false);
+    setQrModalOpen(false);
+    if (onClearInitialPaymentData) {
+      onClearInitialPaymentData();
+    }
+  };
+
   const handleSelectPaymentMethod = async (methodName: string) => {
-    const payAmount = Math.abs(amount);
-    
-    // Generate UPI payment link: upi://pay?pa=omkarsonawane740@okaxis&pn=SSK Travels&am=PAY_AMOUNT&cu=INR
+    const payAmount = parseFloat(enteredAmount) || Math.abs(amount) || 0;
+
+    if (payAmount <= 0) {
+      triggerNotification("Invalid Amount ⚠️", "Please enter a valid payment amount.", "warning");
+      return;
+    }
+
+    if (methodName === "QR Code") {
+      setQrModalOpen(true);
+      return;
+    }
+
+    // Generate UPI payment link
     const upiLink = `upi://pay?pa=omkarsonawane740@okaxis&pn=${encodeURIComponent("SSK Travels")}&am=${payAmount}&cu=INR`;
-    
-    console.log(`Payment via ${methodName}. Initiating deep link...`);
-    
-    // Open Google Pay, PhonePe, Paytm or generic UPI
+
     if (methodName !== "UPI ID") {
       try {
         window.open(upiLink, "_self");
-        // Fallback standard navigation
         window.location.href = upiLink;
       } catch (e) {
-        console.warn("UPI deep linking is not supported on this platform/device:", e);
+        console.warn("UPI deep linking issue:", e);
       }
     } else {
-      // For UPI ID, we copy it to clipboard as well for convenience!
       try {
         await navigator.clipboard.writeText("omkarsonawane740@okaxis");
         triggerNotification(
@@ -155,13 +195,31 @@ export default function PaymentScreen({
       }
     }
 
-    // Immediately record payment into sheet Payment Log and auto-refresh without page reload
+    // Record payment into Google Sheets
     setIsSubmitting(true);
-    const typeLabel = modalType === "Rent" ? "Rent" : "Dues";
-    const success = await onSubmitPayment(typeLabel, payAmount);
+    const success = await onSubmitPayment(paymentType, payAmount);
     setIsSubmitting(false);
+
     if (success) {
       setModalOpen(false);
+      if (onClearInitialPaymentData) {
+        onClearInitialPaymentData();
+      }
+    }
+  };
+
+  const handleConfirmQrPayment = async () => {
+    const payAmount = parseFloat(enteredAmount) || Math.abs(amount) || 0;
+    setIsSubmitting(true);
+    const success = await onSubmitPayment(paymentType, payAmount);
+    setIsSubmitting(false);
+
+    if (success) {
+      setQrModalOpen(false);
+      setModalOpen(false);
+      if (onClearInitialPaymentData) {
+        onClearInitialPaymentData();
+      }
     }
   };
 
@@ -171,6 +229,10 @@ export default function PaymentScreen({
       historySection.scrollIntoView({ behavior: "smooth" });
     }
   };
+
+  const upiQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
+    `upi://pay?pa=omkarsonawane740@okaxis&pn=SSK Travels&am=${parseFloat(enteredAmount) || Math.abs(amount) || 0}&cu=INR`
+  )}`;
 
   return (
     <div className="flex-1 flex flex-col bg-[#F4F6F9] dark:bg-slate-950 text-[#333333] dark:text-slate-100 relative overflow-hidden transition-colors duration-200">
@@ -192,18 +254,36 @@ export default function PaymentScreen({
         <div className="p-4 flex-1 flex flex-col gap-4 pb-20">
           {/* Main Summary Card */}
           <div className="w-full bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-xs border border-slate-100/50 dark:border-slate-800 flex flex-col transition-colors duration-200">
-            <div className="flex items-center gap-3.5 mb-5">
+            <div className="flex items-center gap-3.5 mb-4">
               <div className="bg-[#0A2540] dark:bg-blue-900 p-3 rounded-2xl flex items-center justify-center shrink-0">
                 <Wallet className="w-5.5 h-5.5 text-white" />
               </div>
               <div className="flex flex-col">
                 <h3 className="text-base font-extrabold text-[#0A2540] dark:text-white leading-none mb-1">My Account</h3>
-                <p className="text-xs text-slate-400 dark:text-slate-400 font-bold leading-none">Your registered payment details</p>
+                <p className="text-xs text-slate-400 dark:text-slate-400 font-bold leading-none">Registered driver payment portal</p>
+              </div>
+            </div>
+
+            {/* Driver Details Summary Card */}
+            <div className="bg-blue-50/70 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900/50 rounded-2xl p-3.5 mb-4 flex flex-col gap-1.5 text-xs">
+              <div className="flex items-center justify-between text-[#0A2540] dark:text-blue-200 font-bold">
+                <span className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
+                  <User className="w-3.5 h-3.5" /> Driver Name:
+                </span>
+                <span className="font-extrabold text-sm text-[#0A2540] dark:text-white">{driverName}</span>
+              </div>
+              <div className="flex items-center justify-between text-slate-600 dark:text-slate-300 font-medium">
+                <span>Driver ETM ID:</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200">{driverEtm}</span>
+              </div>
+              <div className="flex items-center justify-between text-slate-600 dark:text-slate-300 font-medium">
+                <span>Mobile Number:</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200">{mobileNo}</span>
               </div>
             </div>
 
             {/* Metrics Grid */}
-            <div className="grid grid-cols-1 gap-4 mb-5">
+            <div className="grid grid-cols-1 gap-3 mb-5">
               {/* Total Outstanding */}
               <div className="bg-[#FAFBFD] dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/80 rounded-2xl p-4 flex flex-col items-center text-center">
                 <span className="text-[10px] font-black tracking-widest text-slate-400 uppercase mb-1">
@@ -342,54 +422,95 @@ export default function PaymentScreen({
       {/* Choose Payment Method Modal */}
       {modalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl flex flex-col gap-4 border border-slate-100 relative">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-extrabold text-[#0A2540]">
-                Choose Payment Method
-              </h3>
+          <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-3xl p-5 shadow-2xl flex flex-col gap-4 border border-slate-100 dark:border-slate-800 relative max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div>
+                <h3 className="text-base font-extrabold text-[#0A2540] dark:text-white">
+                  Choose Payment Method
+                </h3>
+                <p className="text-[11px] text-slate-400 font-medium">Select your preferred UPI app or QR Code</p>
+              </div>
               <button
-                onClick={() => !isSubmitting && setModalOpen(false)}
-                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg transition-colors cursor-pointer"
+                onClick={handleCloseModal}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl transition-colors cursor-pointer"
                 disabled={isSubmitting}
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <p className="text-xs text-slate-500 font-medium leading-normal -mt-1">
-              Recording {modalType} payment for mobile: <strong className="text-[#0A2540]">{loggedMobile}</strong>
-            </p>
-
-            <div className="bg-[#FAFBFD] border border-slate-100 rounded-2xl p-4 flex flex-col items-center text-center">
-              <span className="text-[10px] font-black tracking-widest text-slate-400 uppercase mb-1">
-                Amount to Pay ({modalType})
-              </span>
-              <span className="text-2xl font-black text-[#0A2540]">
-                ₹{Math.abs(amount).toLocaleString("en-IN")}
-              </span>
-              <p className="text-[10px] text-slate-400 font-bold mt-1">
-                UPI: omkarsonawane740@okaxis
-              </p>
+            {/* Driver Details Card in Modal */}
+            <div className="bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/80 rounded-2xl p-3.5 flex flex-col gap-1.5 text-xs text-left">
+              <div className="flex items-center justify-between text-slate-700 dark:text-slate-200">
+                <span className="font-medium text-slate-500">Driver Name:</span>
+                <span className="font-extrabold text-[#0A2540] dark:text-white">{driverName}</span>
+              </div>
+              <div className="flex items-center justify-between text-slate-700 dark:text-slate-200">
+                <span className="font-medium text-slate-500">Driver ETM ID:</span>
+                <span className="font-extrabold text-slate-800 dark:text-slate-100">{driverEtm}</span>
+              </div>
+              <div className="flex items-center justify-between text-slate-700 dark:text-slate-200">
+                <span className="font-medium text-slate-500">Mobile Number:</span>
+                <span className="font-bold text-slate-800 dark:text-slate-100">{mobileNo}</span>
+              </div>
             </div>
 
-            <div className="flex flex-col gap-2.5">
+            {/* Payment For Selector & Amount Input */}
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1 text-left">
+                <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
+                  Payment For
+                </label>
+                <select
+                  value={paymentType}
+                  onChange={(e) => setPaymentType(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-[#0A2540] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0A2540]"
+                >
+                  <option value="Current Outstanding">Current Outstanding</option>
+                  <option value="Last Week Outstanding">Last Week Outstanding</option>
+                  <option value="Total Outstanding">Total Outstanding</option>
+                  <option value="Weekly Rent">Weekly Rent</option>
+                  <option value="Dues">Dues</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1 text-left">
+                <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider flex items-center justify-between">
+                  <span>Amount to Pay (₹)</span>
+                  <span className="text-[10px] text-emerald-600 font-bold lowercase">Editable</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-black text-[#0A2540] dark:text-white">₹</span>
+                  <input
+                    type="number"
+                    value={enteredAmount}
+                    onChange={(e) => setEnteredAmount(e.target.value)}
+                    placeholder="Enter amount"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-8 pr-3 py-2 text-base font-black text-[#0A2540] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0A2540]"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Payment Method Buttons */}
+            <div className="flex flex-col gap-2 pt-1">
               {/* Google Pay */}
               <button
                 onClick={() => handleSelectPaymentMethod("Google Pay")}
                 disabled={isSubmitting}
-                className="w-full flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100/80 active:scale-98 border border-slate-100 rounded-2xl transition-all cursor-pointer group disabled:opacity-50"
+                className="w-full flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-98 border border-slate-100 dark:border-slate-700/80 rounded-2xl transition-all cursor-pointer group disabled:opacity-50"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center border border-slate-100 shadow-3xs">
+                  <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center border border-slate-100 shadow-2xs">
                     <span className="text-xs font-black text-blue-600">GPay</span>
                   </div>
                   <div className="flex flex-col text-left">
-                    <span className="text-xs font-black text-slate-700">Google Pay</span>
+                    <span className="text-xs font-black text-slate-700 dark:text-slate-200">Google Pay</span>
                     <span className="text-[9px] text-slate-400 font-bold">Pay instantly using Google Pay</span>
                   </div>
                 </div>
-                <div className="w-5 h-5 rounded-full bg-slate-200/50 group-hover:bg-[#0A2540] flex items-center justify-center transition-colors">
-                  <span className="text-white text-xs">➔</span>
+                <div className="w-5 h-5 rounded-full bg-slate-200/50 group-hover:bg-[#0A2540] group-hover:text-white flex items-center justify-center transition-colors">
+                  <span className="text-xs">➔</span>
                 </div>
               </button>
 
@@ -397,19 +518,19 @@ export default function PaymentScreen({
               <button
                 onClick={() => handleSelectPaymentMethod("PhonePe")}
                 disabled={isSubmitting}
-                className="w-full flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100/80 active:scale-98 border border-slate-100 rounded-2xl transition-all cursor-pointer group disabled:opacity-50"
+                className="w-full flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-98 border border-slate-100 dark:border-slate-700/80 rounded-2xl transition-all cursor-pointer group disabled:opacity-50"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center border border-slate-100 shadow-3xs">
+                  <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center border border-slate-100 shadow-2xs">
                     <span className="text-xs font-black text-indigo-600">Pe</span>
                   </div>
                   <div className="flex flex-col text-left">
-                    <span className="text-xs font-black text-slate-700">PhonePe</span>
+                    <span className="text-xs font-black text-slate-700 dark:text-slate-200">PhonePe</span>
                     <span className="text-[9px] text-slate-400 font-bold">Pay instantly using PhonePe</span>
                   </div>
                 </div>
-                <div className="w-5 h-5 rounded-full bg-slate-200/50 group-hover:bg-[#0A2540] flex items-center justify-center transition-colors">
-                  <span className="text-white text-xs">➔</span>
+                <div className="w-5 h-5 rounded-full bg-slate-200/50 group-hover:bg-[#0A2540] group-hover:text-white flex items-center justify-center transition-colors">
+                  <span className="text-xs">➔</span>
                 </div>
               </button>
 
@@ -417,19 +538,19 @@ export default function PaymentScreen({
               <button
                 onClick={() => handleSelectPaymentMethod("Paytm")}
                 disabled={isSubmitting}
-                className="w-full flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100/80 active:scale-98 border border-slate-100 rounded-2xl transition-all cursor-pointer group disabled:opacity-50"
+                className="w-full flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-98 border border-slate-100 dark:border-slate-700/80 rounded-2xl transition-all cursor-pointer group disabled:opacity-50"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center border border-slate-100 shadow-3xs">
+                  <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center border border-slate-100 shadow-2xs">
                     <span className="text-xs font-black text-cyan-500">Paytm</span>
                   </div>
                   <div className="flex flex-col text-left">
-                    <span className="text-xs font-black text-slate-700">Paytm</span>
+                    <span className="text-xs font-black text-slate-700 dark:text-slate-200">Paytm</span>
                     <span className="text-[9px] text-slate-400 font-bold">Pay instantly using Paytm app</span>
                   </div>
                 </div>
-                <div className="w-5 h-5 rounded-full bg-slate-200/50 group-hover:bg-[#0A2540] flex items-center justify-center transition-colors">
-                  <span className="text-white text-xs">➔</span>
+                <div className="w-5 h-5 rounded-full bg-slate-200/50 group-hover:bg-[#0A2540] group-hover:text-white flex items-center justify-center transition-colors">
+                  <span className="text-xs">➔</span>
                 </div>
               </button>
 
@@ -437,30 +558,101 @@ export default function PaymentScreen({
               <button
                 onClick={() => handleSelectPaymentMethod("UPI ID")}
                 disabled={isSubmitting}
-                className="w-full flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100/80 active:scale-98 border border-slate-100 rounded-2xl transition-all cursor-pointer group disabled:opacity-50"
+                className="w-full flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-98 border border-slate-100 dark:border-slate-700/80 rounded-2xl transition-all cursor-pointer group disabled:opacity-50"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center border border-slate-100 shadow-3xs">
+                  <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center border border-slate-100 shadow-2xs">
                     <span className="text-xs font-black text-emerald-600">UPI</span>
                   </div>
                   <div className="flex flex-col text-left">
-                    <span className="text-xs font-black text-slate-700">UPI ID</span>
-                    <span className="text-[9px] text-slate-400 font-bold">Copy UPI: omkarsonawane740@okaxis</span>
+                    <span className="text-xs font-black text-slate-700 dark:text-slate-200">UPI ID</span>
+                    <span className="text-[9px] text-slate-400 font-bold">omkarsonawane740@okaxis</span>
                   </div>
                 </div>
-                <div className="w-5 h-5 rounded-full bg-slate-200/50 group-hover:bg-[#0A2540] flex items-center justify-center transition-colors">
-                  <span className="text-white text-xs">➔</span>
+                <div className="w-5 h-5 rounded-full bg-slate-200/50 group-hover:bg-[#0A2540] group-hover:text-white flex items-center justify-center transition-colors">
+                  <Copy className="w-3 h-3 text-slate-600 group-hover:text-white" />
+                </div>
+              </button>
+
+              {/* QR Code */}
+              <button
+                onClick={() => handleSelectPaymentMethod("QR Code")}
+                disabled={isSubmitting}
+                className="w-full flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-98 border border-slate-100 dark:border-slate-700/80 rounded-2xl transition-all cursor-pointer group disabled:opacity-50"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center border border-slate-100 shadow-2xs text-[#0A2540]">
+                    <QrCode className="w-5 h-5" />
+                  </div>
+                  <div className="flex flex-col text-left">
+                    <span className="text-xs font-black text-slate-700 dark:text-slate-200">QR Code</span>
+                    <span className="text-[9px] text-slate-400 font-bold">Scan QR with any UPI app</span>
+                  </div>
+                </div>
+                <div className="w-5 h-5 rounded-full bg-slate-200/50 group-hover:bg-[#0A2540] group-hover:text-white flex items-center justify-center transition-colors">
+                  <span className="text-xs">➔</span>
                 </div>
               </button>
             </div>
 
             {isSubmitting && (
-              <div className="absolute inset-0 bg-white/90 backdrop-blur-xs flex flex-col items-center justify-center rounded-3xl z-10 gap-2">
-                <Loader2 className="w-8 h-8 text-[#0A2540] animate-spin" />
-                <span className="text-xs font-extrabold text-[#0A2540]">Recording payment...</span>
+              <div className="absolute inset-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xs flex flex-col items-center justify-center rounded-3xl z-10 gap-2">
+                <Loader2 className="w-8 h-8 text-[#0A2540] dark:text-blue-400 animate-spin" />
+                <span className="text-xs font-extrabold text-[#0A2540] dark:text-white">Recording payment...</span>
                 <span className="text-[10px] text-slate-400 font-medium">Updating Google Sheets</span>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* QR Code Modal Overlay */}
+      {qrModalOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-3xl p-6 shadow-2xl flex flex-col items-center text-center gap-4 border border-slate-100 dark:border-slate-800 relative">
+            <button
+              onClick={() => setQrModalOpen(false)}
+              className="absolute right-4 top-4 p-1 text-slate-400 hover:text-slate-600 rounded-lg transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <h3 className="text-base font-extrabold text-[#0A2540] dark:text-white mt-1">
+              Scan QR Code to Pay
+            </h3>
+
+            <div className="bg-white p-3 rounded-2xl shadow-md border border-slate-100 my-1">
+              <img
+                src={upiQrUrl}
+                alt="UPI QR Code"
+                className="w-48 h-48 object-contain rounded-lg"
+              />
+            </div>
+
+            <div className="bg-slate-50 dark:bg-slate-800 rounded-2xl p-3 w-full text-center flex flex-col gap-1 border border-slate-100 dark:border-slate-700">
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Payment For: {paymentType}</span>
+              <span className="text-xl font-black text-[#0A2540] dark:text-white">
+                ₹{(parseFloat(enteredAmount) || Math.abs(amount) || 0).toLocaleString("en-IN")}
+              </span>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold mt-0.5">
+                UPI VPA: <strong className="text-[#0A2540] dark:text-white">omkarsonawane740@okaxis</strong>
+              </p>
+            </div>
+
+            <button
+              onClick={handleConfirmQrPayment}
+              disabled={isSubmitting}
+              className="w-full bg-[#0A2540] hover:bg-[#123456] text-white font-extrabold py-3.5 px-4 rounded-2xl text-xs transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Recording Payment...</span>
+                </>
+              ) : (
+                <span>I Have Completed Payment</span>
+              )}
+            </button>
           </div>
         </div>
       )}

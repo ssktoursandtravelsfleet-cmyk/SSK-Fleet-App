@@ -94,11 +94,22 @@ export default function App() {
   // Splash routing and push notification states
   const [isSplashFinished, setIsSplashFinished] = useState(false);
   const [pendingRedirect, setPendingRedirect] = useState<ActiveScreen>(ActiveScreen.LOGIN);
+  const [initialPaymentData, setInitialPaymentData] = useState<{
+    paymentType: string;
+    amount: number;
+  } | null>(null);
   const [pushNotification, setPushNotification] = useState<{
     title: string;
     message: string;
     type: "success" | "warning" | "info";
   } | null>(null);
+
+  const handleNavigateToPayment = (data?: { paymentType: string; amount: number }) => {
+    if (data) {
+      setInitialPaymentData(data);
+    }
+    setActiveScreen(ActiveScreen.PAYMENT);
+  };
 
   // Web Audio Synth for premium double-chime notification sound
   const playNotificationSound = () => {
@@ -1094,6 +1105,7 @@ export default function App() {
             documents={documents}
             transactions={transactions}
             onNavigateToTab={handleNavigateToTab}
+            onNavigateToPayment={handleNavigateToPayment}
             onMarkNotificationRead={handleMarkNotificationRead}
             onRefresh={handleRefreshDatabase}
             syncState={syncState}
@@ -1138,6 +1150,9 @@ export default function App() {
             triggerNotification={triggerPushNotification}
             onSubmitPayment={handleSubmitPayment}
             loggedMobile={phoneNumber || driver?.phone || ""}
+            driver={driver}
+            initialPaymentData={initialPaymentData}
+            onClearInitialPaymentData={() => setInitialPaymentData(null)}
           />
         );
       case ActiveScreen.WEEKLY_HISSAB:

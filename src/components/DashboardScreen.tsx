@@ -25,6 +25,7 @@ interface DashboardScreenProps {
   documents: VehicleDocument[];
   transactions: TransactionItem[];
   onNavigateToTab: (tab: "dashboard" | "earnings" | "vehicle") => void;
+  onNavigateToPayment?: (data: { paymentType: string; amount: number }) => void;
   onMarkNotificationRead: (id: string) => void;
   onRefresh: () => Promise<void>;
   syncState?: 'idle' | 'syncing' | 'synced' | 'failed';
@@ -43,6 +44,7 @@ export default function DashboardScreen({
   documents,
   transactions,
   onNavigateToTab,
+  onNavigateToPayment,
   onMarkNotificationRead,
   onRefresh,
   syncState,
@@ -55,11 +57,6 @@ export default function DashboardScreen({
   lastDayEarnings,
 }: DashboardScreenProps) {
   const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
-  const [payModal, setPayModal] = useState<{ show: boolean; type: "last_week_outstanding" | "current_outstanding" | "rent" | null }>({
-    show: false,
-    type: null,
-  });
-  const [paymentSuccess, setPaymentSuccess] = useState(false);
 
   const parseTxDate = (dateStr: string): Date | null => {
     if (!dateStr) return null;
@@ -182,35 +179,21 @@ export default function DashboardScreen({
     return s;
   };
 
-  const triggerPayment = (type: "last_week_outstanding" | "current_outstanding" | "rent") => {
-    setPayModal({ show: true, type });
-    setPaymentSuccess(false);
+  const getNumericVal = (val: number | string | undefined): number => {
+    if (val === undefined || val === null) return 0;
+    if (typeof val === "number") return Math.abs(val);
+    const clean = String(val).replace(/[^0-9.-]/g, "");
+    const num = parseFloat(clean);
+    return isNaN(num) ? 0 : Math.abs(num);
   };
 
-  const handleConfirmPayment = () => {
-    setPaymentSuccess(true);
-    setTimeout(() => {
-      let paidAmt = 0;
-      if (payModal.type === "last_week_outstanding") {
-        paidAmt = typeof lastWeekOutstandingAmt === "number" ? Math.abs(lastWeekOutstandingAmt) : 0;
-        setLastWeekOutstandingAmt(0);
-      } else if (payModal.type === "current_outstanding") {
-        paidAmt = typeof currentOutstandingAmt === "number" ? Math.abs(currentOutstandingAmt) : 0;
-        setCurrentOutstandingAmt(0);
-      } else if (payModal.type === "rent") {
-        paidAmt = typeof weeklyRentAmt === "number" ? Math.abs(weeklyRentAmt) : 0;
-        setWeeklyRentAmt(0);
-      }
-      setPayModal({ show: false, type: null });
-      setPaymentSuccess(false);
-
-      // Success Toast
-      const toast = document.createElement("div");
-      toast.className = "absolute bottom-20 left-1/2 -translate-x-1/2 bg-[#00C853] text-white text-xs px-5 py-3 rounded-full shadow-xl z-50 flex items-center gap-2 font-bold border border-white/10 animate-bounce";
-      toast.innerHTML = `✓ Payment of ₹${paidAmt} processed successfully`;
-      document.body.appendChild(toast);
-      setTimeout(() => toast.remove(), 3000);
-    }, 1500);
+  const handlePayNow = (paymentType: string, val: number | string | undefined) => {
+    const amt = getNumericVal(val);
+    if (onNavigateToPayment) {
+      onNavigateToPayment({ paymentType, amount: amt });
+    } else {
+      onNavigateToTab("dashboard");
+    }
   };
 
   return (
@@ -401,9 +384,9 @@ export default function DashboardScreen({
                 <h3 className="text-lg font-black text-slate-800 dark:text-white mt-1">₹{Math.abs(lastWeekOutstandingAmt).toLocaleString("en-IN")}</h3>
               )}
             </div>
-            {typeof lastWeekOutstandingAmt === "number" && lastWeekOutstandingAmt < 0 && (
+            {getNumericVal(lastWeekOutstandingAmt) > 0 && (
               <button
-                onClick={() => triggerPayment("last_week_outstanding")}
+                onClick={() => handlePayNow("Last Week Outstanding", lastWeekOutstandingAmt)}
                 className="w-full bg-[#0D47A1] hover:bg-[#1E88E5] text-white text-[9px] font-bold py-1.5 rounded-lg transition-all mt-2.5 cursor-pointer"
                 id="btn-pay-last-week-outstanding"
               >
@@ -430,9 +413,9 @@ export default function DashboardScreen({
                 <h3 className="text-lg font-black text-slate-800 dark:text-white mt-1">₹{Math.abs(weeklyRentAmt).toLocaleString("en-IN")}</h3>
               )}
             </div>
-            {typeof weeklyRentAmt === "number" && weeklyRentAmt > 0 ? (
+            {getNumericVal(weeklyRentAmt) > 0 ? (
               <button
-                onClick={() => triggerPayment("rent")}
+                onClick={() => handlePayNow("Weekly Rent", weeklyRentAmt)}
                 className="w-full bg-[#0D47A1] hover:bg-[#1E88E5] text-white text-[9px] font-bold py-1.5 rounded-lg transition-all mt-2.5 cursor-pointer"
                 id="btn-pay-rent"
               >
@@ -463,9 +446,9 @@ export default function DashboardScreen({
                 <h3 className="text-lg font-black text-slate-800 dark:text-white mt-1">₹{Math.abs(currentOutstandingAmt).toLocaleString("en-IN")}</h3>
               )}
             </div>
-            {typeof currentOutstandingAmt === "number" && currentOutstandingAmt < 0 && (
+            {getNumericVal(currentOutstandingAmt) > 0 && (
               <button
-                onClick={() => triggerPayment("current_outstanding")}
+                onClick={() => handlePayNow("Current Outstanding", currentOutstandingAmt)}
                 className="w-full bg-[#0D47A1] hover:bg-[#1E88E5] text-white text-[9px] font-bold py-1.5 rounded-lg transition-all mt-2.5 cursor-pointer"
                 id="btn-pay-current-outstanding"
               >
@@ -484,8 +467,19 @@ export default function DashboardScreen({
                 <h3 className="text-xl font-black text-white mt-0.5">₹{Math.abs(totalOutstandingAmt).toLocaleString("en-IN")}</h3>
               )}
             </div>
-            <div className="w-9 h-9 bg-white/10 rounded-xl flex items-center justify-center text-white border border-white/10">
-              <Wallet className="w-5 h-5 text-amber-300" />
+            <div className="flex items-center gap-2">
+              {getNumericVal(totalOutstandingAmt) > 0 && (
+                <button
+                  onClick={() => handlePayNow("Total Outstanding", totalOutstandingAmt)}
+                  className="bg-amber-400 hover:bg-amber-300 active:scale-95 text-slate-950 font-black text-xs px-3.5 py-1.5 rounded-xl transition-all shadow-md cursor-pointer flex items-center gap-1"
+                  id="btn-pay-total-outstanding"
+                >
+                  <span>Pay Now</span>
+                </button>
+              )}
+              <div className="w-8 h-8 bg-white/10 rounded-xl flex items-center justify-center text-white border border-white/10 shrink-0">
+                <Wallet className="w-4.5 h-4.5 text-amber-300" />
+              </div>
             </div>
           </div>
         </div>
@@ -615,76 +609,6 @@ export default function DashboardScreen({
                   ))
                 )}
               </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Payment Processing Interactive Overlay */}
-      <AnimatePresence>
-        {payModal.show && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-5"
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-3xl p-5 shadow-2xl w-full max-w-[320px] text-center"
-            >
-              <h3 className="text-sm font-bold text-slate-800">
-                Confirm Fleet Settlement
-              </h3>
-              <p className="text-[11px] text-slate-500 mt-1 font-medium">
-                Authorized via SSK Tours & Travels Bank API
-              </p>
-
-              <div className="my-5 bg-[#F5F7FA] rounded-2xl p-4 border border-slate-100">
-                <span className="text-[9px] text-slate-400 block font-bold uppercase tracking-wider">
-                  Amount to Deduct
-                </span>
-                <span className="text-2xl font-black text-[#0D47A1] mt-1 block">
-                  ₹{payModal.type === "last_week_outstanding" 
-                    ? (typeof lastWeekOutstandingAmt === "number" ? Math.abs(lastWeekOutstandingAmt).toFixed(2) : String(lastWeekOutstandingAmt))
-                    : payModal.type === "current_outstanding" 
-                    ? (typeof currentOutstandingAmt === "number" ? Math.abs(currentOutstandingAmt).toFixed(2) : String(currentOutstandingAmt))
-                    : (typeof weeklyRentAmt === "number" ? Math.abs(weeklyRentAmt).toFixed(2) : String(weeklyRentAmt))}
-                </span>
-                <span className="text-[9px] bg-blue-50 text-[#0D47A1] px-2 py-0.5 rounded-md font-extrabold mt-2 inline-block">
-                  {payModal.type === "last_week_outstanding" 
-                    ? "Last Week Outstanding" 
-                    : payModal.type === "current_outstanding" 
-                    ? "Current Outstanding" 
-                    : "Weekly Vehicle Rent"}
-                </span>
-              </div>
-
-              {paymentSuccess ? (
-                <div className="flex flex-col items-center justify-center py-3">
-                  <div className="w-8 h-8 border-2 border-[#1E88E5] border-t-transparent rounded-full animate-spin mb-2"></div>
-                  <p className="text-[10px] text-slate-600 font-bold animate-pulse">
-                    Securing bank connection...
-                  </p>
-                </div>
-              ) : (
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setPayModal({ show: false, type: null })}
-                    className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-2.5 rounded-xl text-xs transition-all cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleConfirmPayment}
-                    className="flex-1 bg-[#1E88E5] hover:bg-[#0D47A1] text-white font-bold py-2.5 rounded-xl text-xs transition-all shadow-md cursor-pointer"
-                  >
-                    Pay Now
-                  </button>
-                </div>
-              )}
             </motion.div>
           </motion.div>
         )}
