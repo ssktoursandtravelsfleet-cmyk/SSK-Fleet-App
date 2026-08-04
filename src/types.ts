@@ -3,7 +3,6 @@ export enum ActiveScreen {
   LOGIN = "LOGIN",
   OTP = "OTP",
   DASHBOARD = "DASHBOARD",
-  EARNINGS = "EARNINGS",
   VEHICLE = "VEHICLE",
   ONBOARDING = "ONBOARDING",
   PAYMENT = "PAYMENT",

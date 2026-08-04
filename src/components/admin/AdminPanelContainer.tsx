@@ -260,17 +260,8 @@ export default function AdminPanelContainer({
   const pendingDocCount = drivers.filter(d => d.documentStatus === "Pending" || d.documentStatus === "Submitted").length;
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
-      {/* Top Header */}
-      <AdminHeader
-        onOpenDrawer={() => setIsDrawerOpen(true)}
-        activeScreen={activeScreen}
-        onRefresh={loadAdminData}
-        isRefreshing={isRefreshing}
-        onSwitchToDriverView={onSwitchToDriverView}
-      />
-
-      {/* Navigation Drawer */}
+    <div className="min-h-screen bg-slate-100 dark:bg-slate-900 flex flex-col lg:flex-row font-sans">
+      {/* Permanent Desktop Sidebar & Mobile Drawer */}
       <AdminDrawer
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
@@ -282,6 +273,17 @@ export default function AdminPanelContainer({
         pendingDriverCount={pendingDriversCount}
         pendingDocCount={pendingDocCount}
       />
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-w-0 min-h-screen">
+        {/* Top Header */}
+        <AdminHeader
+          onOpenDrawer={() => setIsDrawerOpen(true)}
+          activeScreen={activeScreen}
+          onRefresh={loadAdminData}
+          isRefreshing={isRefreshing}
+          onSwitchToDriverView={onSwitchToDriverView}
+        />
 
       {/* Main Screen Body */}
       <main className="flex-1 overflow-y-auto no-scrollbar">
@@ -376,6 +378,7 @@ export default function AdminPanelContainer({
           <AdminSettings onRefreshAll={loadAdminData} isRefreshing={isRefreshing} />
         )}
       </main>
+      </div>
     </div>
   );
 }

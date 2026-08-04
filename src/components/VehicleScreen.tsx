@@ -68,22 +68,22 @@ export default function VehicleScreen({
   return (
     <div className="flex-1 flex flex-col bg-[#F4F6F9] dark:bg-slate-950 text-[#333333] dark:text-slate-100 relative overflow-hidden transition-colors duration-200">
       {/* 1. Header Bar */}
-      <div className="bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 px-4 py-3 flex items-center justify-between shadow-xs select-none relative shrink-0 transition-colors duration-200">
+      <div className="bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 px-4 sm:px-6 py-3.5 flex items-center justify-between shadow-xs select-none relative shrink-0 transition-colors duration-200">
         <button
           onClick={onOpenDrawer}
-          className="p-1 hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95 rounded-lg transition-all text-[#0A2540] dark:text-slate-100 cursor-pointer"
+          className="lg:hidden p-1 hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95 rounded-lg transition-all text-[#0A2540] dark:text-slate-100 cursor-pointer"
           title="Open Menu"
           id="btn-open-menu-vehicle"
         >
           <Menu className="w-6 h-6" />
         </button>
-        <h2 className="absolute left-1/2 -translate-x-1/2 text-lg font-extrabold text-[#0A2540] dark:text-white">Vehicle</h2>
-        <div className="w-8" /> {/* Balance spacer */}
+        <h2 className="text-lg font-extrabold text-[#0A2540] dark:text-white mx-auto lg:mx-0">Vehicle Details</h2>
+        <div className="w-8 lg:hidden" /> {/* Balance spacer */}
       </div>
 
       <PullToRefresh onRefresh={onRefresh} syncState={syncState}>
         {/* 2. Main content container */}
-        <div className="p-4 flex-1 flex flex-col gap-4">
+        <div className="p-4 sm:p-6 lg:p-8 flex-1 flex flex-col gap-4 max-w-4xl lg:max-w-5xl mx-auto w-full">
           {isVehicleAssigned ? (
             /* Vehicle Assigned Card */
             <div className="w-full bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-xs border border-slate-100 dark:border-slate-800 flex flex-col transition-colors duration-200">

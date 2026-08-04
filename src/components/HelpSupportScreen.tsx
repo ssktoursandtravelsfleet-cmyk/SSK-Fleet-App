@@ -145,16 +145,16 @@ export default function HelpSupportScreen({
   return (
     <div className="flex-1 flex flex-col bg-[#F4F6F9] dark:bg-slate-950 text-[#333333] dark:text-slate-100 relative overflow-hidden transition-colors duration-200">
       {/* Top Bar Header */}
-      <div className="bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 px-4 py-3 flex items-center justify-between shadow-xs select-none relative shrink-0 transition-colors duration-200">
+      <div className="bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 px-4 sm:px-6 py-3.5 flex items-center justify-between shadow-xs select-none relative shrink-0 transition-colors duration-200">
         <button
           onClick={onOpenDrawer}
-          className="p-1 hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95 rounded-lg transition-all text-[#0A2540] dark:text-slate-100 cursor-pointer"
+          className="lg:hidden p-1 hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95 rounded-lg transition-all text-[#0A2540] dark:text-slate-100 cursor-pointer"
           title="Open Menu"
           id="btn-open-menu-help"
         >
           <Menu className="w-6 h-6" />
         </button>
-        <h2 className="absolute left-1/2 -translate-x-1/2 text-lg font-extrabold text-[#0A2540] dark:text-white flex items-center gap-1.5">
+        <h2 className="text-lg font-extrabold text-[#0A2540] dark:text-white flex items-center gap-1.5 mx-auto lg:mx-0">
           <span>🛟</span> Help & Support
         </h2>
         <span className="px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/80 text-[#0A2540] dark:text-blue-300 font-extrabold text-[10px] border border-blue-200/80 dark:border-blue-800 shrink-0">
@@ -163,7 +163,7 @@ export default function HelpSupportScreen({
       </div>
 
       <PullToRefresh onRefresh={onRefresh} syncState={syncState}>
-        <div className="p-4 flex-1 flex flex-col gap-5 max-w-lg mx-auto w-full">
+        <div className="p-4 sm:p-6 lg:p-8 flex-1 flex flex-col gap-5 max-w-4xl lg:max-w-5xl mx-auto w-full">
 
           {/* 1. Contact Support Section */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-xs border border-slate-100 dark:border-slate-800 space-y-4 transition-colors duration-200">

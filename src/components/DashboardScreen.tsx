@@ -24,7 +24,7 @@ interface DashboardScreenProps {
   notifications: NotificationItem[];
   documents: VehicleDocument[];
   transactions: TransactionItem[];
-  onNavigateToTab: (tab: "dashboard" | "earnings" | "vehicle") => void;
+  onNavigateToTab: (tab: "dashboard" | "vehicle") => void;
   onNavigateToPayment?: (data: { paymentType: string; amount: number }) => void;
   onMarkNotificationRead: (id: string) => void;
   onRefresh: () => Promise<void>;
@@ -35,7 +35,6 @@ interface DashboardScreenProps {
   weeklyRent?: number | string;
   currentOutstanding?: number | string;
   totalOutstanding?: number | string;
-  lastDayEarnings?: number;
 }
 
 export default function DashboardScreen({
@@ -54,71 +53,10 @@ export default function DashboardScreen({
   weeklyRent: weeklyRentProp,
   currentOutstanding,
   totalOutstanding: totalOutstandingProp,
-  lastDayEarnings,
 }: DashboardScreenProps) {
   const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
 
-  const parseTxDate = (dateStr: string): Date | null => {
-    if (!dateStr) return null;
-    const parts = dateStr.trim().split(/\s+/);
-    if (parts.length === 3) {
-      const day = parseInt(parts[0], 10);
-      const monthStr = parts[1];
-      const year = parseInt(parts[2], 10);
-      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-      const monthIdx = months.indexOf(monthStr);
-      if (monthIdx !== -1 && !isNaN(day) && !isNaN(year)) {
-        return new Date(year, monthIdx, day);
-      }
-    }
-    const parsed = new Date(dateStr);
-    return isNaN(parsed.getTime()) ? null : parsed;
-  };
-
-  const fallbackLastDayEarnings = React.useMemo(() => {
-    if (!transactions || transactions.length === 0) return 0;
-
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(today.getDate() - 1);
-    yesterday.setHours(0, 0, 0, 0);
-
-    const yesterdayTx = transactions.filter((tx) => {
-      const txDate = parseTxDate(tx.date);
-      if (!txDate) return false;
-      txDate.setHours(0, 0, 0, 0);
-      return txDate.getTime() === yesterday.getTime();
-    });
-
-    if (yesterdayTx.length > 0) {
-      return yesterdayTx.reduce((sum, tx) => sum + (tx.amount || 0), 0);
-    }
-
-    const groupedByDate: { [key: string]: { dateObj: Date; amount: number } } = {};
-    
-    transactions.forEach((tx) => {
-      const txDate = parseTxDate(tx.date);
-      if (!txDate) return;
-      txDate.setHours(0, 0, 0, 0);
-      const key = txDate.getTime().toString();
-      if (!groupedByDate[key]) {
-        groupedByDate[key] = { dateObj: txDate, amount: 0 };
-      }
-      groupedByDate[key].amount += tx.amount || 0;
-    });
-
-    const sortedGrouped = Object.values(groupedByDate).sort((a, b) => b.dateObj.getTime() - a.dateObj.getTime());
-    if (sortedGrouped.length > 0) {
-      return sortedGrouped[0].amount;
-    }
-
-    return 0;
-  }, [transactions]);
-
-  const finalLastDayEarnings = lastDayEarnings !== undefined ? lastDayEarnings : fallbackLastDayEarnings;
-  
   // Custom states matching requested financials
-  const [earningsToday, setEarningsToday] = useState(2350);
   const [lastWeekOutstandingAmt, setLastWeekOutstandingAmt] = useState<number | string>(lastWeekOutstanding !== undefined ? lastWeekOutstanding : 0);
   const [weeklyRentAmt, setWeeklyRentAmt] = useState<number | string>(weeklyRentProp !== undefined ? weeklyRentProp : 0);
   const [currentOutstandingAmt, setCurrentOutstandingAmt] = useState<number | string>(currentOutstanding !== undefined ? currentOutstanding : 0);
@@ -200,20 +138,20 @@ export default function DashboardScreen({
     <div className="flex-1 flex flex-col bg-[#F5F7FA] dark:bg-slate-950 relative overflow-hidden text-[#333333] dark:text-slate-100 transition-colors duration-200">
       
       {/* 1. Header Profile & Online Toggle */}
-      <div className="bg-[#0D47A1] dark:bg-slate-900 text-white px-5 pt-4 pb-6 rounded-b-[32px] shadow-md shrink-0 relative border-b border-white/10">
-        <div className="flex justify-between items-center">
+      <div className="bg-[#0D47A1] dark:bg-slate-900 text-white px-5 sm:px-8 pt-5 pb-6 lg:rounded-3xl shadow-md shrink-0 relative border-b border-white/10 lg:m-6 lg:mb-2">
+        <div className="flex justify-between items-center max-w-7xl mx-auto">
           <div className="flex items-center gap-2">
             <button
               onClick={onOpenDrawer}
-              className="p-1.5 hover:bg-white/10 active:scale-95 rounded-lg transition-all text-white cursor-pointer -ml-1 mr-1"
+              className="lg:hidden p-1.5 hover:bg-white/10 active:scale-95 rounded-lg transition-all text-white cursor-pointer -ml-1 mr-1"
               title="Open Menu"
               id="btn-open-menu-dashboard"
             >
               <Menu className="w-5.5 h-5.5" />
             </button>
             <div>
-              <p className="text-[10px] text-blue-200 font-semibold tracking-wider uppercase leading-none">Welcome Back</p>
-              <h3 className="text-sm font-extrabold tracking-tight text-white mt-1 leading-none">{driver.Name || driver.Driver_Name || driver.name}</h3>
+              <p className="text-[10px] sm:text-xs text-blue-200 font-semibold tracking-wider uppercase leading-none">Welcome Back</p>
+              <h3 className="text-sm sm:text-base lg:text-lg font-extrabold tracking-tight text-white mt-1 leading-none">{driver.Name || driver.Driver_Name || driver.name}</h3>
             </div>
           </div>
 
@@ -292,7 +230,7 @@ export default function DashboardScreen({
 
       {/* PullToRefresh Wrapper */}
       <PullToRefresh onRefresh={onRefresh} syncState={syncState}>
-        <div className="px-4 pt-2 pb-24 flex-1">
+        <div className="px-4 sm:px-6 lg:px-8 pt-2 pb-24 flex-1 max-w-7xl mx-auto w-full">
         
         {/* Inactive Account Information Banner */}
         {(driver.Status || driver.status || "").trim().toLowerCase() === "inactive" && (
@@ -337,57 +275,29 @@ export default function DashboardScreen({
           Financial & Operational Dashboard
         </h4>
 
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          {/* Today's Earnings Card */}
-          <div
-            onClick={() => onNavigateToTab("earnings")}
-            className="bg-white dark:bg-slate-900 rounded-2xl p-3.5 border border-slate-100 dark:border-slate-800 shadow-xs flex flex-col justify-between cursor-pointer hover:border-[#1E88E5]/30 hover:shadow-sm active:scale-[0.99] transition-all"
-          >
-            <div className="flex justify-between items-start">
-              <div className="w-8 h-8 bg-blue-50 dark:bg-blue-900/40 rounded-lg flex items-center justify-center text-[#1E88E5] dark:text-blue-400">
-                <TrendingUp className="w-4.5 h-4.5" />
-              </div>
-              <span className="text-[9px] bg-blue-50 dark:bg-blue-900/40 text-[#1E88E5] dark:text-blue-300 px-1.5 py-0.5 rounded font-extrabold uppercase">
-                Last Day
-              </span>
-            </div>
-            <div className="mt-3">
-              <p className="text-[10px] text-slate-400 dark:text-slate-400 font-bold leading-none">Last Day Earnings</p>
-              <h3 className="text-lg font-black text-slate-800 dark:text-white mt-1">₹{finalLastDayEarnings.toLocaleString("en-IN")}</h3>
-            </div>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onNavigateToTab("earnings");
-              }}
-              className="w-full bg-[#1E88E5]/5 dark:bg-blue-500/10 hover:bg-[#1E88E5]/10 text-[9px] font-bold text-[#1E88E5] dark:text-blue-300 py-1.5 rounded-lg transition-all mt-2.5 cursor-pointer text-center block border border-[#1E88E5]/10 dark:border-blue-500/20"
-            >
-              View History
-            </button>
-          </div>
-
+        <div className="grid grid-cols-3 gap-2 mb-4">
           {/* Last Week Outstanding */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl p-3.5 border border-slate-100 dark:border-slate-800 shadow-xs flex flex-col justify-between">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-2.5 border border-slate-100 dark:border-slate-800 shadow-xs flex flex-col justify-between">
             <div className="flex justify-between items-start">
-              <div className="w-8 h-8 bg-amber-50 dark:bg-amber-900/40 rounded-lg flex items-center justify-center text-amber-600 dark:text-amber-400">
-                <Wallet className="w-4.5 h-4.5" />
+              <div className="w-7 h-7 bg-amber-50 dark:bg-amber-900/40 rounded-lg flex items-center justify-center text-amber-600 dark:text-amber-400">
+                <Wallet className="w-3.5 h-3.5" />
               </div>
-              <span className="text-[9px] bg-amber-50 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded font-extrabold uppercase">
+              <span className="text-[8px] bg-amber-50 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 px-1 py-0.5 rounded font-extrabold uppercase">
                 Dues
               </span>
             </div>
-            <div className="mt-3">
-              <p className="text-[10px] text-slate-400 dark:text-slate-400 font-bold leading-none">Last Week Outstanding</p>
+            <div className="mt-2">
+              <p className="text-[9px] text-slate-400 dark:text-slate-400 font-bold leading-tight">Last Week OS</p>
               {typeof lastWeekOutstandingAmt === "string" ? (
-                <h3 className="text-xs font-semibold text-rose-600 dark:text-rose-400 mt-1">{lastWeekOutstandingAmt}</h3>
+                <h3 className="text-xs font-semibold text-rose-600 dark:text-rose-400 mt-0.5 truncate">{lastWeekOutstandingAmt}</h3>
               ) : (
-                <h3 className="text-lg font-black text-slate-800 dark:text-white mt-1">₹{Math.abs(lastWeekOutstandingAmt).toLocaleString("en-IN")}</h3>
+                <h3 className="text-base font-black text-slate-800 dark:text-white mt-0.5 truncate">₹{Math.abs(lastWeekOutstandingAmt).toLocaleString("en-IN")}</h3>
               )}
             </div>
             {getNumericVal(lastWeekOutstandingAmt) > 0 && (
               <button
                 onClick={() => handlePayNow("Last Week Outstanding", lastWeekOutstandingAmt)}
-                className="w-full bg-[#0D47A1] hover:bg-[#1E88E5] text-white text-[9px] font-bold py-1.5 rounded-lg transition-all mt-2.5 cursor-pointer"
+                className="w-full bg-[#0D47A1] hover:bg-[#1E88E5] text-white text-[9px] font-bold py-1.5 rounded-lg transition-all mt-2 cursor-pointer"
                 id="btn-pay-last-week-outstanding"
               >
                 Pay Now
@@ -396,60 +306,60 @@ export default function DashboardScreen({
           </div>
 
           {/* Weekly Rent */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl p-3.5 border border-slate-100 dark:border-slate-800 shadow-xs flex flex-col justify-between">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-2.5 border border-slate-100 dark:border-slate-800 shadow-xs flex flex-col justify-between">
             <div className="flex justify-between items-start">
-              <div className="w-8 h-8 bg-rose-50 dark:bg-rose-900/40 rounded-lg flex items-center justify-center text-rose-600 dark:text-rose-400">
-                <CreditCard className="w-4.5 h-4.5" />
+              <div className="w-7 h-7 bg-rose-50 dark:bg-rose-900/40 rounded-lg flex items-center justify-center text-rose-600 dark:text-rose-400">
+                <CreditCard className="w-3.5 h-3.5" />
               </div>
-              <span className="text-[9px] bg-rose-50 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 px-1.5 py-0.5 rounded font-extrabold uppercase">
+              <span className="text-[8px] bg-rose-50 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 px-1 py-0.5 rounded font-extrabold uppercase">
                 Rent
               </span>
             </div>
-            <div className="mt-3">
-              <p className="text-[10px] text-slate-400 dark:text-slate-400 font-bold leading-none">Weekly Rent</p>
+            <div className="mt-2">
+              <p className="text-[9px] text-slate-400 dark:text-slate-400 font-bold leading-tight">Weekly Rent</p>
               {typeof weeklyRentAmt === "string" ? (
-                <h3 className="text-xs font-semibold text-rose-600 dark:text-rose-400 mt-1">{weeklyRentAmt}</h3>
+                <h3 className="text-xs font-semibold text-rose-600 dark:text-rose-400 mt-0.5 truncate">{weeklyRentAmt}</h3>
               ) : (
-                <h3 className="text-lg font-black text-slate-800 dark:text-white mt-1">₹{Math.abs(weeklyRentAmt).toLocaleString("en-IN")}</h3>
+                <h3 className="text-base font-black text-slate-800 dark:text-white mt-0.5 truncate">₹{Math.abs(weeklyRentAmt).toLocaleString("en-IN")}</h3>
               )}
             </div>
             {getNumericVal(weeklyRentAmt) > 0 ? (
               <button
                 onClick={() => handlePayNow("Weekly Rent", weeklyRentAmt)}
-                className="w-full bg-[#0D47A1] hover:bg-[#1E88E5] text-white text-[9px] font-bold py-1.5 rounded-lg transition-all mt-2.5 cursor-pointer"
+                className="w-full bg-[#0D47A1] hover:bg-[#1E88E5] text-white text-[9px] font-bold py-1.5 rounded-lg transition-all mt-2 cursor-pointer"
                 id="btn-pay-rent"
               >
                 Pay Lease
               </button>
             ) : (
-              <div className="flex items-center justify-center gap-1 text-[9px] font-bold text-[#00C853] py-1.5 mt-2.5 bg-emerald-50 dark:bg-emerald-950/50 rounded-lg">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Settled
+              <div className="flex items-center justify-center gap-1 text-[8px] font-bold text-[#00C853] py-1 mt-2 bg-emerald-50 dark:bg-emerald-950/50 rounded-lg">
+                <CheckCircle2 className="w-3 h-3" /> Settled
               </div>
             )}
           </div>
 
           {/* Current Outstanding */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl p-3.5 border border-slate-100 dark:border-slate-800 shadow-xs flex flex-col justify-between">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-2.5 border border-slate-100 dark:border-slate-800 shadow-xs flex flex-col justify-between">
             <div className="flex justify-between items-start">
-              <div className="w-8 h-8 bg-amber-50 dark:bg-amber-900/40 rounded-lg flex items-center justify-center text-amber-600 dark:text-amber-400">
-                <Wallet className="w-4.5 h-4.5" />
+              <div className="w-7 h-7 bg-amber-50 dark:bg-amber-900/40 rounded-lg flex items-center justify-center text-amber-600 dark:text-amber-400">
+                <Wallet className="w-3.5 h-3.5" />
               </div>
-              <span className="text-[9px] bg-amber-50 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded font-extrabold uppercase">
+              <span className="text-[8px] bg-amber-50 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 px-1 py-0.5 rounded font-extrabold uppercase">
                 Dues
               </span>
             </div>
-            <div className="mt-3">
-              <p className="text-[10px] text-slate-400 dark:text-slate-400 font-bold leading-none">Current Outstanding</p>
+            <div className="mt-2">
+              <p className="text-[9px] text-slate-400 dark:text-slate-400 font-bold leading-tight">Current OS</p>
               {typeof currentOutstandingAmt === "string" ? (
-                <h3 className="text-xs font-semibold text-rose-600 dark:text-rose-400 mt-1">{currentOutstandingAmt}</h3>
+                <h3 className="text-xs font-semibold text-rose-600 dark:text-rose-400 mt-0.5 truncate">{currentOutstandingAmt}</h3>
               ) : (
-                <h3 className="text-lg font-black text-slate-800 dark:text-white mt-1">₹{Math.abs(currentOutstandingAmt).toLocaleString("en-IN")}</h3>
+                <h3 className="text-base font-black text-slate-800 dark:text-white mt-0.5 truncate">₹{Math.abs(currentOutstandingAmt).toLocaleString("en-IN")}</h3>
               )}
             </div>
             {getNumericVal(currentOutstandingAmt) > 0 && (
               <button
                 onClick={() => handlePayNow("Current Outstanding", currentOutstandingAmt)}
-                className="w-full bg-[#0D47A1] hover:bg-[#1E88E5] text-white text-[9px] font-bold py-1.5 rounded-lg transition-all mt-2.5 cursor-pointer"
+                className="w-full bg-[#0D47A1] hover:bg-[#1E88E5] text-white text-[9px] font-bold py-1.5 rounded-lg transition-all mt-2 cursor-pointer"
                 id="btn-pay-current-outstanding"
               >
                 Pay Now
@@ -458,7 +368,7 @@ export default function DashboardScreen({
           </div>
 
           {/* Total Outstanding Card */}
-          <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-[#0D47A1] rounded-2xl p-3.5 text-white shadow-xs flex items-center justify-between col-span-2 mt-1">
+          <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-[#0D47A1] rounded-2xl p-3.5 text-white shadow-xs flex items-center justify-between col-span-3 mt-1">
             <div>
               <p className="text-[10px] text-blue-200 font-bold uppercase tracking-wider">Total Outstanding</p>
               {typeof totalOutstandingAmt === "string" ? (

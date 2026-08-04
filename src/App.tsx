@@ -2,20 +2,20 @@ import React, { useState, useEffect } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Home as HomeIcon,
-  TrendingUp as EarningsIcon,
   Car as VehicleIcon,
   LogOut as LogOutIcon,
   Menu as MenuIcon,
   Wallet as PaymentIcon,
   Receipt as ReceiptIcon,
   User as ProfileIcon,
-  LifeBuoy as HelpIcon
+  LifeBuoy as HelpIcon,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 
 import PhoneFrame from "./components/PhoneFrame";
 import LoginScreen from "./components/LoginScreen";
 import DashboardScreen from "./components/DashboardScreen";
-import EarningsScreen from "./components/EarningsScreen";
 import VehicleScreen from "./components/VehicleScreen";
 import SplashScreen from "./components/SplashScreen";
 import OnboardingScreen from "./components/OnboardingScreen";
@@ -34,6 +34,7 @@ import { DISPLAY_VERSION } from "./lib/version";
 export default function App() {
   const [activeScreen, setActiveScreen] = useState<ActiveScreen>(ActiveScreen.SPLASH);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isDriverSidebarCollapsed, setIsDriverSidebarCollapsed] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState("");
   const [viaWhatsApp, setViaWhatsApp] = useState(false);
   const [documentRecord, setDocumentRecord] = useState<DriverDocumentRecord | null>(null);
@@ -50,7 +51,6 @@ export default function App() {
   const [weeklyRent, setWeeklyRent] = useState<number | string>(cachedData?.weeklyRent !== undefined ? cachedData.weeklyRent : 0);
   const [currentOutstanding, setCurrentOutstanding] = useState<number | string>(cachedData?.currentOutstanding !== undefined ? cachedData.currentOutstanding : 0);
   const [totalOutstanding, setTotalOutstanding] = useState<number | string>(cachedData?.totalOutstanding !== undefined ? cachedData.totalOutstanding : 0);
-  const [lastDayEarnings, setLastDayEarnings] = useState<number>(cachedData?.lastDayEarnings !== undefined ? cachedData.lastDayEarnings : 0);
   const [weeklyHissabRow, setWeeklyHissabRow] = useState<string[] | undefined>(cachedData?.weeklyHissabRow);
   const [weeklyHissabHeaders, setWeeklyHissabHeaders] = useState<string[] | undefined>(cachedData?.weeklyHissabHeaders);
   const [weeklyHissabRows, setWeeklyHissabRows] = useState<string[][] | undefined>(cachedData?.weeklyHissabRows);
@@ -206,15 +206,6 @@ export default function App() {
       return;
     }
 
-    const earningNotif = unread.find(n => n && (
-      (typeof n.title === "string" && n.title.toLowerCase().includes("earning")) ||
-      (typeof n.message === "string" && n.message.toLowerCase().includes("earning"))
-    ));
-    if (earningNotif) {
-      setTimeout(() => {
-        triggerPushNotification("New Earnings Loaded 💰", earningNotif.message || "", "success");
-      }, 2000);
-    }
   };
 
   // Request browser permission for notifications
@@ -309,7 +300,6 @@ export default function App() {
               setWeeklyRent(result.weeklyRent !== undefined ? result.weeklyRent : 0);
               setCurrentOutstanding(result.currentOutstanding !== undefined ? result.currentOutstanding : 0);
               setTotalOutstanding(result.totalOutstanding !== undefined ? result.totalOutstanding : 0);
-              setLastDayEarnings(result.lastDayEarnings !== undefined ? result.lastDayEarnings : 0);
               setWeeklyHissabRow(result.weeklyHissabRow);
               setWeeklyHissabHeaders(result.weeklyHissabHeaders);
               setWeeklyHissabRows(result.weeklyHissabRows);
@@ -377,7 +367,6 @@ export default function App() {
         setWeeklyRent(result.weeklyRent !== undefined ? result.weeklyRent : 0);
         setCurrentOutstanding(result.currentOutstanding !== undefined ? result.currentOutstanding : 0);
         setTotalOutstanding(result.totalOutstanding !== undefined ? result.totalOutstanding : 0);
-        setLastDayEarnings(result.lastDayEarnings !== undefined ? result.lastDayEarnings : 0);
         setWeeklyHissabRow(result.weeklyHissabRow);
         setWeeklyHissabHeaders(result.weeklyHissabHeaders);
         setWeeklyHissabRows(result.weeklyHissabRows);
@@ -498,7 +487,6 @@ export default function App() {
         setWeeklyRent(syncResult.weeklyRent !== undefined ? syncResult.weeklyRent : 0);
         setCurrentOutstanding(syncResult.currentOutstanding !== undefined ? syncResult.currentOutstanding : 0);
         setTotalOutstanding(syncResult.totalOutstanding !== undefined ? syncResult.totalOutstanding : 0);
-        setLastDayEarnings(syncResult.lastDayEarnings !== undefined ? syncResult.lastDayEarnings : 0);
         setWeeklyHissabRow(syncResult.weeklyHissabRow);
         setWeeklyHissabHeaders(syncResult.weeklyHissabHeaders);
         setWeeklyHissabRows(syncResult.weeklyHissabRows);
@@ -649,13 +637,10 @@ export default function App() {
     }
   };
 
-  const handleNavigateToTab = (tab: "dashboard" | "earnings" | "vehicle") => {
+  const handleNavigateToTab = (tab: "dashboard" | "vehicle") => {
     switch (tab) {
       case "dashboard":
         setActiveScreen(ActiveScreen.DASHBOARD);
-        break;
-      case "earnings":
-        setActiveScreen(ActiveScreen.EARNINGS);
         break;
       case "vehicle":
         setActiveScreen(ActiveScreen.VEHICLE);
@@ -956,7 +941,6 @@ export default function App() {
         setWeeklyRent(0);
         setCurrentOutstanding(0);
         setTotalOutstanding(0);
-        setLastDayEarnings(0);
         setWeeklyHissabRow(undefined);
         setWeeklyHissabHeaders(undefined);
         setWeeklyHissabRows(undefined);
@@ -978,7 +962,6 @@ export default function App() {
       setWeeklyRent(result.weeklyRent !== undefined ? result.weeklyRent : 0);
       setCurrentOutstanding(result.currentOutstanding !== undefined ? result.currentOutstanding : 0);
       setTotalOutstanding(result.totalOutstanding !== undefined ? result.totalOutstanding : 0);
-      setLastDayEarnings(result.lastDayEarnings !== undefined ? result.lastDayEarnings : 0);
       setWeeklyHissabRow(result.weeklyHissabRow);
       setWeeklyHissabHeaders(result.weeklyHissabHeaders);
       setWeeklyHissabRows(result.weeklyHissabRows);
@@ -1115,17 +1098,6 @@ export default function App() {
             weeklyRent={weeklyRent}
             currentOutstanding={currentOutstanding}
             totalOutstanding={totalOutstanding}
-            lastDayEarnings={lastDayEarnings}
-          />
-        );
-      case ActiveScreen.EARNINGS:
-        return (
-          <EarningsScreen
-            transactions={transactions}
-            onRefresh={handleRefreshDatabase}
-            syncState={syncState}
-            driverPhone={driver?.phone || phoneNumber}
-            onOpenDrawer={() => setIsDrawerOpen(true)}
           />
         );
       case ActiveScreen.VEHICLE:
@@ -1224,11 +1196,15 @@ export default function App() {
     }
   };
 
+  // Determine if we are on an auth / onboarding screen
+  const isAuthScreen =
+    activeScreen === ActiveScreen.LOGIN ||
+    activeScreen === ActiveScreen.SPLASH ||
+    activeScreen === ActiveScreen.ONBOARDING;
+
   // Determine if we should show bottom navigation
   const showBottomNav =
-    activeScreen !== ActiveScreen.LOGIN &&
-    activeScreen !== ActiveScreen.SPLASH &&
-    activeScreen !== ActiveScreen.ONBOARDING &&
+    !isAuthScreen &&
     activeScreen !== ActiveScreen.ADMIN_PANEL;
 
   return (
@@ -1249,8 +1225,6 @@ export default function App() {
                 setActiveScreen(ActiveScreen.DASHBOARD);
               } else if (msg.includes("puc") || title.includes("puc") || msg.includes("document") || title.includes("document")) {
                 setActiveScreen(ActiveScreen.VEHICLE);
-              } else if (msg.includes("earning") || title.includes("earning")) {
-                setActiveScreen(ActiveScreen.EARNINGS);
               } else {
                 setActiveScreen(ActiveScreen.DASHBOARD);
               }
@@ -1293,11 +1267,128 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Content Layer */}
-      <div className="flex-1 flex flex-col relative overflow-hidden bg-slate-50 dark:bg-slate-950 transition-colors duration-200">
-        <AnimatePresence mode="wait">
-          {renderActiveScreen()}
-        </AnimatePresence>
+      {/* Content & Layout Layer */}
+      <div className="flex-1 flex flex-col lg:flex-row relative overflow-hidden bg-slate-50 dark:bg-slate-950 transition-colors duration-200 min-h-screen">
+        
+        {/* Permanent Desktop Sidebar for Driver App (lg screens >= 1024px) */}
+        {!isAuthScreen && activeScreen !== ActiveScreen.ADMIN_PANEL && (
+          <aside
+            className={`hidden lg:flex flex-col bg-[#08182D] text-white sticky top-0 h-screen transition-all duration-300 z-40 border-r border-slate-800 shrink-0 ${
+              isDriverSidebarCollapsed ? "w-20" : "w-64"
+            }`}
+          >
+            {/* Header / Brand */}
+            <div className="p-4 bg-[#0D47A1] text-white flex items-center justify-between border-b border-blue-900 shrink-0 h-16">
+              {!isDriverSidebarCollapsed ? (
+                <div className="flex items-center gap-3 overflow-hidden">
+                  <div className="w-9 h-9 rounded-xl bg-amber-400 text-slate-900 flex items-center justify-center font-black text-xs shadow-xs shrink-0">
+                    SSK
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="font-extrabold text-xs text-white truncate">SSK Fleet</h3>
+                    <p className="text-[10px] text-blue-200 font-bold uppercase tracking-wider truncate">Driver Portal</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="w-full flex justify-center">
+                  <div className="w-9 h-9 rounded-xl bg-amber-400 text-slate-900 flex items-center justify-center font-black text-xs shadow-xs shrink-0">
+                    SSK
+                  </div>
+                </div>
+              )}
+              <button
+                onClick={() => setIsDriverSidebarCollapsed(!isDriverSidebarCollapsed)}
+                className="p-1.5 rounded-lg hover:bg-blue-800 text-blue-200 hover:text-white transition-colors cursor-pointer ml-1"
+                title={isDriverSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+              >
+                {isDriverSidebarCollapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
+              </button>
+            </div>
+
+            {/* Driver Profile Summary Card */}
+            {!isDriverSidebarCollapsed && (
+              <div className="p-3.5 mx-3 mt-3 bg-slate-800/80 rounded-2xl border border-slate-700/60 flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-blue-600/40 text-blue-300 border border-blue-400/30 flex items-center justify-center font-bold text-xs shrink-0">
+                  {(driver.name || "D").charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-xs font-bold text-white truncate">{driver.name}</h4>
+                  <p className="text-[10px] font-mono text-slate-400 truncate">{driver.phone}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Navigation Menu Links */}
+            <div className="flex-1 py-4 overflow-y-auto px-3 space-y-1 no-scrollbar">
+              {(driver.role === "admin" || driver.User_Type === "admin") && (
+                <button
+                  onClick={() => setActiveScreen(ActiveScreen.ADMIN_PANEL)}
+                  title={isDriverSidebarCollapsed ? "Switch to Admin Panel" : undefined}
+                  className={`w-full flex items-center ${
+                    isDriverSidebarCollapsed ? "justify-center px-2" : "gap-3 px-3.5"
+                  } py-2.5 rounded-xl text-xs font-bold transition-all bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 mb-2 cursor-pointer`}
+                >
+                  <span className="w-5 h-5 flex items-center justify-center font-black shrink-0">⚙️</span>
+                  {!isDriverSidebarCollapsed && <span className="truncate">Admin Panel</span>}
+                </button>
+              )}
+
+              {[
+                { screen: ActiveScreen.DASHBOARD, label: "Home", icon: HomeIcon },
+                { screen: ActiveScreen.WEEKLY_HISSAB, label: "Weekly Hissab", icon: ReceiptIcon },
+                { screen: ActiveScreen.VEHICLE, label: "Vehicle", icon: VehicleIcon },
+                { screen: ActiveScreen.PAYMENT, label: "Payment", icon: PaymentIcon },
+                { screen: ActiveScreen.PROFILE, label: "Profile", icon: ProfileIcon },
+                { screen: ActiveScreen.HELP_SUPPORT, label: "Help & Support", icon: HelpIcon },
+              ].map((item) => {
+                const isActive = activeScreen === item.screen;
+                return (
+                  <button
+                    key={item.screen}
+                    onClick={() => setActiveScreen(item.screen)}
+                    title={isDriverSidebarCollapsed ? item.label : undefined}
+                    className={`w-full flex items-center ${
+                      isDriverSidebarCollapsed ? "justify-center px-2" : "gap-3 px-3.5"
+                    } py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      isActive
+                        ? "bg-[#0D47A1] text-white shadow-md font-black"
+                        : "text-slate-400 hover:text-white hover:bg-slate-800/50"
+                    }`}
+                  >
+                    <item.icon className={`w-4 h-4 shrink-0 ${isActive ? "text-white" : "text-slate-400"}`} />
+                    {!isDriverSidebarCollapsed && <span className="truncate">{item.label}</span>}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Desktop Sidebar Footer */}
+            <div className="p-3 border-t border-slate-800 bg-[#061324] space-y-2 shrink-0">
+              <button
+                onClick={handleLogout}
+                title={isDriverSidebarCollapsed ? "Logout" : undefined}
+                className={`w-full flex items-center ${
+                  isDriverSidebarCollapsed ? "justify-center px-2" : "gap-3 px-3.5"
+                } py-2.5 rounded-xl text-xs font-bold text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-all cursor-pointer`}
+              >
+                <LogOutIcon className="w-4 h-4 shrink-0" />
+                {!isDriverSidebarCollapsed && <span>Logout</span>}
+              </button>
+              {!isDriverSidebarCollapsed && (
+                <div className="text-center text-[10px] font-mono text-slate-500 pt-0.5">
+                  SSK Driver App • {DISPLAY_VERSION}
+                </div>
+              )}
+            </div>
+          </aside>
+        )}
+
+        {/* Main Content Area */}
+        <div className="flex-1 flex flex-col min-w-0 bg-slate-50 dark:bg-slate-950 transition-colors duration-200">
+          <AnimatePresence mode="wait">
+            {renderActiveScreen()}
+          </AnimatePresence>
+        </div>
       </div>
 
       {/* Sliding Left Navigation Drawer */}
@@ -1349,7 +1440,6 @@ export default function App() {
                   {[
                     { screen: ActiveScreen.DASHBOARD, label: "Home", icon: HomeIcon },
                     { screen: ActiveScreen.WEEKLY_HISSAB, label: "Weekly Hissab", icon: ReceiptIcon },
-                    { screen: ActiveScreen.EARNINGS, label: "Earnings", icon: EarningsIcon },
                     { screen: ActiveScreen.VEHICLE, label: "Vehicle", icon: VehicleIcon },
                     { screen: ActiveScreen.PAYMENT, label: "Payment", icon: PaymentIcon },
                     { screen: ActiveScreen.PROFILE, label: "Profile", icon: ProfileIcon },

@@ -1,4 +1,4 @@
-import { DriverDetails, VehicleDocument, PartnerEarning, NotificationItem, TransactionItem } from "./types";
+import { DriverDetails, VehicleDocument, NotificationItem, TransactionItem } from "./types";
 
 export const mockDriver: DriverDetails = {
   id: "SSK12345",
@@ -76,20 +76,6 @@ export const mockDocuments: VehicleDocument[] = [
     documentNo: "TAX-MH02-948291",
     description: "Commercial state road tax receipt token."
   }
-];
-
-export const weeklyEarnings: PartnerEarning[] = [
-  { partner: "Uber", amount: 6250, tripsCount: 28, percentage: 44, color: "#000000" },
-  { partner: "Ola", amount: 4800, tripsCount: 22, percentage: 34, color: "#99CC33" },
-  { partner: "Rapido", amount: 2100, tripsCount: 14, percentage: 15, color: "#FFC000" },
-  { partner: "Cash", amount: 1100, tripsCount: 6, percentage: 7, color: "#0D47A1" }
-];
-
-export const monthlyEarnings: PartnerEarning[] = [
-  { partner: "Uber", amount: 26800, tripsCount: 124, percentage: 45, color: "#000000" },
-  { partner: "Ola", amount: 19500, tripsCount: 96, percentage: 33, color: "#99CC33" },
-  { partner: "Rapido", amount: 8900, tripsCount: 58, percentage: 15, color: "#FFC000" },
-  { partner: "Cash", amount: 4300, tripsCount: 22, percentage: 7, color: "#0D47A1" }
 ];
 
 export const mockNotifications: NotificationItem[] = [

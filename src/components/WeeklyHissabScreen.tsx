@@ -372,7 +372,7 @@ export default function WeeklyHissabScreen({
       </div>
 
       {/* Main Container */}
-      <div className="flex-1 px-4 py-5 max-w-lg mx-auto w-full space-y-4 pb-24">
+      <div className="flex-1 px-4 sm:px-6 py-6 max-w-4xl lg:max-w-5xl mx-auto w-full space-y-5 pb-24">
         
         {/* Dynamic Weekly Date Range Filter Dropdown */}
         {weekOptions.length > 0 && (
