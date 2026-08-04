@@ -180,7 +180,8 @@ export default function WeeklyHissabScreen({
   driver,
   msgFormatRows = [],
   accessToken,
-  onBackToDashboard
+  onBackToDashboard,
+  onNavigateToPayment
 }: WeeklyHissabScreenProps) {
   const [localMsgFormatRows, setLocalMsgFormatRows] = useState<string[][]>(msgFormatRows || []);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
@@ -431,6 +432,16 @@ export default function WeeklyHissabScreen({
             <div className="bg-slate-50/90 border border-slate-200/70 rounded-xl p-4 font-mono text-xs text-slate-800 leading-relaxed whitespace-pre-line break-words select-text">
               {columnYMessageText}
             </div>
+
+            {onNavigateToPayment && (
+              <button
+                onClick={onNavigateToPayment}
+                className="w-full bg-[#0D47A1] hover:bg-[#1E88E5] text-white font-extrabold py-3 px-4 rounded-xl text-xs transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer mt-2"
+                id="btn-weekly-hissab-pay-now"
+              >
+                <span>Pay Dues via UPI (9702291761@sbi)</span>
+              </button>
+            )}
           </div>
         ) : (
           /* Error Handling: If no record exists for the selected week */

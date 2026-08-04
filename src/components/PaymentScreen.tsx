@@ -121,12 +121,14 @@ export default function PaymentScreen({
       if (initialPaymentData.paymentType) {
         setPaymentType(initialPaymentData.paymentType);
       }
-      if (initialPaymentData.amount !== undefined) {
+      if (initialPaymentData.amount !== undefined && initialPaymentData.amount > 0) {
         setEnteredAmount(String(initialPaymentData.amount));
+      } else {
+        setEnteredAmount(String(Math.abs(amount) || 0));
       }
       setModalOpen(true);
     } else {
-      setEnteredAmount(String(Math.abs(amount)));
+      setEnteredAmount(String(Math.abs(amount) || 0));
     }
   }, [initialPaymentData, outstandingAmount]);
 
@@ -172,26 +174,29 @@ export default function PaymentScreen({
       return;
     }
 
-    // Generate UPI payment link
-    const upiLink = `upi://pay?pa=omkarsonawane740@okaxis&pn=${encodeURIComponent("SSK Travels")}&am=${payAmount}&cu=INR`;
+    // Generate UPI payment link with pre-filled receiver details
+    const receiverUpi = "9702291761@sbi";
+    const receiverName = encodeURIComponent("SSK Fleet");
+    const note = encodeURIComponent("SSK Fleet Outstanding Payment");
+    const upiLink = `upi://pay?pa=${receiverUpi}&pn=${receiverName}&am=${payAmount}&tn=${note}&cu=INR`;
 
-    if (methodName !== "UPI ID") {
+    if (methodName === "UPI ID") {
+      try {
+        await navigator.clipboard.writeText("9702291761@sbi");
+        triggerNotification(
+          "UPI ID Copied! 📋",
+          "9702291761@sbi copied to clipboard. Paste it in your UPI app.",
+          "success"
+        );
+      } catch (err) {
+        console.warn("Failed to copy UPI ID:", err);
+      }
+    } else {
       try {
         window.open(upiLink, "_self");
         window.location.href = upiLink;
       } catch (e) {
         console.warn("UPI deep linking issue:", e);
-      }
-    } else {
-      try {
-        await navigator.clipboard.writeText("omkarsonawane740@okaxis");
-        triggerNotification(
-          "UPI ID Copied! 📋",
-          "omkarsonawane740@okaxis copied to clipboard. Paste it in your UPI app.",
-          "success"
-        );
-      } catch (err) {
-        console.warn("Failed to copy UPI ID:", err);
       }
     }
 
@@ -231,7 +236,7 @@ export default function PaymentScreen({
   };
 
   const upiQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
-    `upi://pay?pa=omkarsonawane740@okaxis&pn=SSK Travels&am=${parseFloat(enteredAmount) || Math.abs(amount) || 0}&cu=INR`
+    `upi://pay?pa=9702291761@sbi&pn=SSK Fleet&am=${parseFloat(enteredAmount) || Math.abs(amount) || 0}&tn=SSK Fleet Outstanding Payment&cu=INR`
   )}`;
 
   return (
@@ -439,6 +444,18 @@ export default function PaymentScreen({
               </button>
             </div>
 
+            {/* Receiver Details Banner */}
+            <div className="bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-900/50 rounded-2xl p-3 flex items-center justify-between text-xs">
+              <div>
+                <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-bold uppercase block">Receiver Name</span>
+                <span className="font-extrabold text-[#0A2540] dark:text-white text-sm">SSK Fleet</span>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-bold uppercase block">Receiver UPI ID</span>
+                <span className="font-mono font-extrabold text-emerald-700 dark:text-emerald-300 text-xs">9702291761@sbi</span>
+              </div>
+            </div>
+
             {/* Driver Details Card in Modal */}
             <div className="bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/80 rounded-2xl p-3.5 flex flex-col gap-1.5 text-xs text-left">
               <div className="flex items-center justify-between text-slate-700 dark:text-slate-200">
@@ -554,6 +571,46 @@ export default function PaymentScreen({
                 </div>
               </button>
 
+              {/* BHIM */}
+              <button
+                onClick={() => handleSelectPaymentMethod("BHIM")}
+                disabled={isSubmitting}
+                className="w-full flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-98 border border-slate-100 dark:border-slate-700/80 rounded-2xl transition-all cursor-pointer group disabled:opacity-50"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center border border-slate-100 shadow-2xs">
+                    <span className="text-xs font-black text-orange-600">BHIM</span>
+                  </div>
+                  <div className="flex flex-col text-left">
+                    <span className="text-xs font-black text-slate-700 dark:text-slate-200">BHIM UPI</span>
+                    <span className="text-[9px] text-slate-400 font-bold">Pay instantly using BHIM app</span>
+                  </div>
+                </div>
+                <div className="w-5 h-5 rounded-full bg-slate-200/50 group-hover:bg-[#0A2540] group-hover:text-white flex items-center justify-center transition-colors">
+                  <span className="text-xs">➔</span>
+                </div>
+              </button>
+
+              {/* Amazon Pay */}
+              <button
+                onClick={() => handleSelectPaymentMethod("Amazon Pay")}
+                disabled={isSubmitting}
+                className="w-full flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-98 border border-slate-100 dark:border-slate-700/80 rounded-2xl transition-all cursor-pointer group disabled:opacity-50"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center border border-slate-100 shadow-2xs">
+                    <span className="text-[10px] font-black text-amber-600">Amazon</span>
+                  </div>
+                  <div className="flex flex-col text-left">
+                    <span className="text-xs font-black text-slate-700 dark:text-slate-200">Amazon Pay UPI</span>
+                    <span className="text-[9px] text-slate-400 font-bold">Pay using Amazon Pay UPI</span>
+                  </div>
+                </div>
+                <div className="w-5 h-5 rounded-full bg-slate-200/50 group-hover:bg-[#0A2540] group-hover:text-white flex items-center justify-center transition-colors">
+                  <span className="text-xs">➔</span>
+                </div>
+              </button>
+
               {/* UPI ID */}
               <button
                 onClick={() => handleSelectPaymentMethod("UPI ID")}
@@ -565,8 +622,8 @@ export default function PaymentScreen({
                     <span className="text-xs font-black text-emerald-600">UPI</span>
                   </div>
                   <div className="flex flex-col text-left">
-                    <span className="text-xs font-black text-slate-700 dark:text-slate-200">UPI ID</span>
-                    <span className="text-[9px] text-slate-400 font-bold">omkarsonawane740@okaxis</span>
+                    <span className="text-xs font-black text-slate-700 dark:text-slate-200">Copy UPI ID</span>
+                    <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-bold">9702291761@sbi</span>
                   </div>
                 </div>
                 <div className="w-5 h-5 rounded-full bg-slate-200/50 group-hover:bg-[#0A2540] group-hover:text-white flex items-center justify-center transition-colors">
@@ -634,8 +691,14 @@ export default function PaymentScreen({
               <span className="text-xl font-black text-[#0A2540] dark:text-white">
                 ₹{(parseFloat(enteredAmount) || Math.abs(amount) || 0).toLocaleString("en-IN")}
               </span>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold mt-0.5">
-                UPI VPA: <strong className="text-[#0A2540] dark:text-white">omkarsonawane740@okaxis</strong>
+              <p className="text-[11px] text-slate-600 dark:text-slate-300 font-semibold mt-0.5">
+                Receiver: <strong className="text-[#0A2540] dark:text-white">SSK Fleet</strong>
+              </p>
+              <p className="text-[11px] text-slate-600 dark:text-slate-300 font-semibold">
+                UPI VPA: <strong className="text-emerald-600 dark:text-emerald-400 font-mono">9702291761@sbi</strong>
+              </p>
+              <p className="text-[9px] text-slate-400 font-medium">
+                Note: SSK Fleet Outstanding Payment
               </p>
             </div>
 
