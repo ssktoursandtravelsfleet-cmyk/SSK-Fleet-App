@@ -2821,7 +2821,21 @@ export async function fetchAllAdminData(accessToken?: string | null): Promise<{
 }> {
   try {
     validateConfig(SPREADSHEET_ID);
-    const [loginRows, masterRows, docRows, earningsRows, outstandingRows, dvRows, docvRows, vmRows, dailyHissabRows, weeklyHissabRows] = await Promise.all([
+    const [
+      loginRows,
+      masterRows,
+      docRows,
+      earningsRows,
+      outstandingRows,
+      dvRows,
+      docvRows,
+      vmRows,
+      dailyHissabRows,
+      weeklyHissabRows,
+      driverWeeklySummaryRows,
+      evRows,
+      cngRows
+    ] = await Promise.all([
       fetchSheetValues(SPREADSHEET_ID, "Driver_Login", accessToken).catch(() => []),
       fetchSheetValues(SPREADSHEET_ID, "Driver_Master", accessToken).catch(() => []),
       fetchSheetValues(SPREADSHEET_ID, "Driver_Documents", accessToken).catch(() => []),
@@ -2831,41 +2845,248 @@ export async function fetchAllAdminData(accessToken?: string | null): Promise<{
       fetchSheetValues(SPREADSHEET_ID, "Documents_Verification", accessToken).catch(() => []),
       fetchSheetValues(SPREADSHEET_ID, "Vehicle_Master", accessToken).catch(() => []),
       fetchSheetValues(SPREADSHEET_ID, "Daily_Hissab", accessToken).catch(() => []),
-      fetchSheetValues(SPREADSHEET_ID, "Weekly_Hissab", accessToken).catch(() => [])
+      fetchSheetValues(SPREADSHEET_ID, "Weekly_Hissab", accessToken).catch(() => []),
+      fetchSheetValues(SPREADSHEET_ID, "Driver_Weekly_Summary", accessToken).catch(() => []),
+      fetchSheetValues(SPREADSHEET_ID, "EV", accessToken).catch(() => []),
+      fetchSheetValues(SPREADSHEET_ID, "CNG", accessToken).catch(() => [])
     ]);
 
-    // Parse Daily_Hissab: Match ETM ID -> Column V (index 21)
-    const dailyHissabByEtm = new Map<string, number>();
-    if (dailyHissabRows && dailyHissabRows.length > 1) {
-      for (let i = 1; i < dailyHissabRows.length; i++) {
-        const row = dailyHissabRows[i];
-        if (!row || row.length === 0) continue;
-        // Search for ETM ID in row cells (or row[1] / row[0])
-        let etmKey = "";
-        for (let c = 0; c < Math.min(row.length, 5); c++) {
-          const val = String(row[c] || "").trim().toUpperCase();
-          if (val.startsWith("ETM") || /^[A-Z0-9_-]{3,15}$/.test(val)) {
-            etmKey = val;
-            break;
-          }
+    // Robust amount parser preserving negative & positive numbers
+    const parseAmountWithNull = (val: any): number | null => {
+      if (val === undefined || val === null) return null;
+      const str = String(val).trim();
+      if (!str) return null;
+      const cleanStr = str.replace(/[^0-9.-]/g, "");
+      if (!cleanStr || cleanStr === "-" || cleanStr === ".") return null;
+      const parsed = Number(cleanStr);
+      return isNaN(parsed) ? null : parsed;
+    };
+
+    // Helper to generate normalized lookup keys for ETM ID, Mobile, and Driver ID
+    const generateNormalizedKeys = (etm?: string, mobile?: string, id?: string): string[] => {
+      const keys = new Set<string>();
+      if (etm) {
+        const rawEtm = String(etm).trim().toUpperCase();
+        if (rawEtm) {
+          keys.add(rawEtm);
+          const noHyphen = rawEtm.replace(/[\s_-]+/g, "");
+          keys.add(noHyphen);
+          const digitsOnly = noHyphen.replace(/^ETM/i, "");
+          if (digitsOnly) keys.add(digitsOnly);
         }
-        if (!etmKey && row[1]) etmKey = String(row[1]).trim().toUpperCase();
-        
-        if (etmKey) {
-          const colV = row[21] ? parseFloat(String(row[21]).replace(/[^\d.-]/g, "")) || 0 : 0;
-          dailyHissabByEtm.set(etmKey, colV);
+      }
+      if (mobile) {
+        const cleanMobile = String(mobile).replace(/\D/g, "").slice(-10);
+        if (cleanMobile) {
+          keys.add(cleanMobile);
+          keys.add(`DR-${cleanMobile}`);
+        }
+      }
+      if (id) {
+        const cleanId = String(id).trim().toUpperCase();
+        if (cleanId) keys.add(cleanId);
+      }
+      return Array.from(keys);
+    };
+
+    interface OutstandingRecord {
+      weeklyOS?: number;
+      currentOS?: number;
+      totalOS?: number;
+      sourceSheet: string;
+    }
+
+    const outstandingLogMap = new Map<string, OutstandingRecord>();
+    const weeklyHissabMap = new Map<string, OutstandingRecord>();
+    const dailyHissabMap = new Map<string, number>();
+
+    // 1. Process Outstanding_Log sheet
+    if (outstandingRows && outstandingRows.length > 0) {
+      let etmColIdx = 1;
+      let mobileColIdx = 3;
+      let weeklyOsIdx = 4;
+      let currentOsIdx = 6;
+      let totalOsIdx = 7;
+
+      const headerRow = outstandingRows[0];
+      if (headerRow && headerRow.length > 0) {
+        const headers = headerRow.map(h => String(h || "").trim().toLowerCase().replace(/[\s_-]+/g, ""));
+        const foundEtmIdx = headers.findIndex(h => h === "etm" || h === "etmid" || h === "driveretm");
+        if (foundEtmIdx !== -1) etmColIdx = foundEtmIdx;
+
+        const foundMobileIdx = headers.findIndex(h => h === "mobile" || h === "phone" || h === "mobilenumber" || h === "contact");
+        if (foundMobileIdx !== -1) mobileColIdx = foundMobileIdx;
+
+        const foundWeeklyIdx = headers.findIndex(h => h.includes("weeklyos") || h.includes("weeklyoutstanding") || h.includes("lastweekos"));
+        if (foundWeeklyIdx !== -1) weeklyOsIdx = foundWeeklyIdx;
+
+        const foundCurrentIdx = headers.findIndex(h => h.includes("currentos") || h.includes("currentoutstanding"));
+        if (foundCurrentIdx !== -1) currentOsIdx = foundCurrentIdx;
+
+        const foundTotalIdx = headers.findIndex(h => h.includes("totalos") || h.includes("totaloutstanding"));
+        if (foundTotalIdx !== -1) totalOsIdx = foundTotalIdx;
+      }
+
+      for (let i = 1; i < outstandingRows.length; i++) {
+        const row = outstandingRows[i];
+        if (!row || row.length === 0) continue;
+
+        const rowEtm = row[etmColIdx] !== undefined ? String(row[etmColIdx]).trim() : (row[1] ? String(row[1]).trim() : "");
+        const rowMobile = row[mobileColIdx] !== undefined ? String(row[mobileColIdx]).trim() : (row[3] ? String(row[3]).trim() : "");
+
+        const weeklyVal = parseAmountWithNull(row[weeklyOsIdx] !== undefined ? row[weeklyOsIdx] : row[4]);
+        const currentVal = parseAmountWithNull(row[currentOsIdx] !== undefined ? row[currentOsIdx] : row[6]);
+        const totalVal = parseAmountWithNull(row[totalOsIdx] !== undefined ? row[totalOsIdx] : row[7]);
+
+        const rec: OutstandingRecord = {
+          weeklyOS: weeklyVal !== null ? weeklyVal : undefined,
+          currentOS: currentVal !== null ? currentVal : undefined,
+          totalOS: totalVal !== null ? totalVal : undefined,
+          sourceSheet: "Outstanding_Log"
+        };
+
+        const keys = generateNormalizedKeys(rowEtm, rowMobile);
+        for (const k of keys) {
+          outstandingLogMap.set(k, rec);
         }
       }
     }
 
-    // Parse Weekly_Hissab: Match ETM ID -> Column V (index 21)
-    const weeklyHissabByEtm = new Map<string, number>();
-    if (weeklyHissabRows && weeklyHissabRows.length > 1) {
-      for (let i = 1; i < weeklyHissabRows.length; i++) {
-        const row = weeklyHissabRows[i];
+    // Helper to process Weekly Hissab sheets (Weekly_Hissab, Driver_Weekly_Summary, EV, CNG)
+    const processWeeklyHissabSheet = (rows: string[][], sheetName: string) => {
+      if (!rows || rows.length <= 1) return;
+
+      const headerRow = rows[0];
+      const headers = headerRow ? headerRow.map(h => String(h || "").trim().toLowerCase().replace(/[\s_-]+/g, "")) : [];
+
+      let etmColIdx = headers.findIndex(h => h === "etmid" || h === "etm" || h === "driveretm" || h === "etid");
+      if (etmColIdx === -1) {
+        if (rows.length > 1 && rows[1].length > 6 && String(rows[1][6]).toUpperCase().startsWith("ETM")) {
+          etmColIdx = 6;
+        } else if (rows.length > 1 && rows[1].length > 1 && String(rows[1][1]).toUpperCase().startsWith("ETM")) {
+          etmColIdx = 1;
+        } else {
+          etmColIdx = 6;
+        }
+      }
+
+      let mobileColIdx = headers.findIndex(h => h === "mobile" || h === "phone" || h === "mobilenumber" || h === "contact");
+      let driverIdColIdx = headers.findIndex(h => h === "driverid" || h === "id");
+
+      let weeklyOsIdx = headers.findIndex(h => h.includes("weeklyoutstanding") || h.includes("finalos") || h.includes("weeklyos") || h.includes("lastweekos") || h.includes("outstanding"));
+      if (weeklyOsIdx === -1) weeklyOsIdx = 21;
+
+      let currentOsIdx = headers.findIndex(h => h.includes("currentos") || h.includes("currentoutstanding"));
+      if (currentOsIdx === -1) currentOsIdx = 20;
+
+      let dateIdx = headers.findIndex(h => h.includes("enddate") || h.includes("date") || h.includes("weekend"));
+      if (dateIdx === -1) dateIdx = 2;
+
+      const parseRowEndDate = (row: string[]) => {
+        if (!row || !row[dateIdx]) return 0;
+        const dateStr = String(row[dateIdx]).trim();
+        if (!dateStr) return 0;
+        if (dateStr.includes("/") || dateStr.includes("-")) {
+          const parts = dateStr.split(/[\/\-]/);
+          if (parts.length === 3) {
+            if (parts[0].length === 4) {
+              return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])).getTime() || 0;
+            } else if (parts[2].length === 4) {
+              return new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0])).getTime() || 0;
+            }
+          }
+        }
+        const timestamp = Date.parse(dateStr);
+        return isNaN(timestamp) ? 0 : timestamp;
+      };
+
+      const rowsByDriverKey = new Map<string, string[]>();
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row || row.length === 0) continue;
+
+        let rowEtm = row[etmColIdx] ? String(row[etmColIdx]).trim() : "";
+        if (!rowEtm) {
+          for (let c = 0; c < Math.min(row.length, 8); c++) {
+            const val = String(row[c] || "").trim().toUpperCase();
+            if (val.startsWith("ETM") || /^ETM[A-Z0-9_-]+$/i.test(val)) {
+              rowEtm = val;
+              break;
+            }
+          }
+        }
+        const rowMobile = mobileColIdx !== -1 && row[mobileColIdx] ? String(row[mobileColIdx]).trim() : "";
+        const rowDriverId = driverIdColIdx !== -1 && row[driverIdColIdx] ? String(row[driverIdColIdx]).trim() : "";
+
+        const keys = generateNormalizedKeys(rowEtm, rowMobile, rowDriverId);
+        if (keys.length === 0) continue;
+
+        const primaryKey = keys[0];
+        const existingRow = rowsByDriverKey.get(primaryKey);
+        if (!existingRow) {
+          rowsByDriverKey.set(primaryKey, row);
+        } else if (parseRowEndDate(row) >= parseRowEndDate(existingRow)) {
+          rowsByDriverKey.set(primaryKey, row);
+        }
+
+        for (const k of keys) {
+          if (!weeklyHissabMap.has(k)) {
+            const weeklyVal = parseAmountWithNull(row[weeklyOsIdx] !== undefined ? row[weeklyOsIdx] : row[21]);
+            const currentVal = parseAmountWithNull(row[currentOsIdx] !== undefined ? row[currentOsIdx] : row[20]);
+            if (weeklyVal !== null || currentVal !== null) {
+              weeklyHissabMap.set(k, {
+                weeklyOS: weeklyVal !== null ? weeklyVal : undefined,
+                currentOS: currentVal !== null ? currentVal : undefined,
+                sourceSheet: sheetName
+              });
+            }
+          }
+        }
+      }
+
+      rowsByDriverKey.forEach((row) => {
+        let rowEtm = row[etmColIdx] ? String(row[etmColIdx]).trim() : "";
+        if (!rowEtm) {
+          for (let c = 0; c < Math.min(row.length, 8); c++) {
+            const val = String(row[c] || "").trim().toUpperCase();
+            if (val.startsWith("ETM")) {
+              rowEtm = val;
+              break;
+            }
+          }
+        }
+        const rowMobile = mobileColIdx !== -1 && row[mobileColIdx] ? String(row[mobileColIdx]).trim() : "";
+        const rowDriverId = driverIdColIdx !== -1 && row[driverIdColIdx] ? String(row[driverIdColIdx]).trim() : "";
+
+        const keys = generateNormalizedKeys(rowEtm, rowMobile, rowDriverId);
+        const weeklyVal = parseAmountWithNull(row[weeklyOsIdx] !== undefined ? row[weeklyOsIdx] : row[21]);
+        const currentVal = parseAmountWithNull(row[currentOsIdx] !== undefined ? row[currentOsIdx] : row[20]);
+
+        const rec: OutstandingRecord = {
+          weeklyOS: weeklyVal !== null ? weeklyVal : undefined,
+          currentOS: currentVal !== null ? currentVal : undefined,
+          sourceSheet: sheetName
+        };
+
+        for (const k of keys) {
+          weeklyHissabMap.set(k, rec);
+        }
+      });
+    };
+
+    // Process all potential weekly summary / hissabs sources
+    processWeeklyHissabSheet(weeklyHissabRows, "Weekly_Hissab");
+    processWeeklyHissabSheet(driverWeeklySummaryRows, "Driver_Weekly_Summary");
+    processWeeklyHissabSheet(evRows, "EV");
+    processWeeklyHissabSheet(cngRows, "CNG");
+
+    // Process Daily_Hissab for current outstanding fallback
+    if (dailyHissabRows && dailyHissabRows.length > 1) {
+      for (let i = 1; i < dailyHissabRows.length; i++) {
+        const row = dailyHissabRows[i];
         if (!row || row.length === 0) continue;
         let etmKey = "";
-        for (let c = 0; c < Math.min(row.length, 5); c++) {
+        for (let c = 0; c < Math.min(row.length, 8); c++) {
           const val = String(row[c] || "").trim().toUpperCase();
           if (val.startsWith("ETM") || /^[A-Z0-9_-]{3,15}$/.test(val)) {
             etmKey = val;
@@ -2875,8 +3096,13 @@ export async function fetchAllAdminData(accessToken?: string | null): Promise<{
         if (!etmKey && row[1]) etmKey = String(row[1]).trim().toUpperCase();
 
         if (etmKey) {
-          const colV = row[21] ? parseFloat(String(row[21]).replace(/[^\d.-]/g, "")) || 0 : 0;
-          weeklyHissabByEtm.set(etmKey, colV);
+          const colV = parseAmountWithNull(row[21]);
+          if (colV !== null) {
+            const keys = generateNormalizedKeys(etmKey);
+            for (const k of keys) {
+              dailyHissabMap.set(k, colV);
+            }
+          }
         }
       }
     }
@@ -3342,9 +3568,65 @@ export async function fetchAllAdminData(accessToken?: string | null): Promise<{
       const validName = d.name && isValidDriverName(d.name) ? d.name.trim() : "";
       const finalName = validName || (d.mobile ? `Driver (${d.mobile})` : "Pending Name");
 
-      const curOutstanding = (cleanEtm && dailyHissabByEtm.get(cleanEtm)) || 0;
-      const lastWeekOutstanding = (cleanEtm && weeklyHissabByEtm.get(cleanEtm)) || 0;
-      const totalOut = curOutstanding + lastWeekOutstanding;
+      const driverKeys = generateNormalizedKeys(d.etmId, d.mobile, uniqueId);
+
+      let weeklyOSVal: number | null = null;
+      let currentOSVal: number | null = null;
+      let totalOSVal: number | null = null;
+      let resolvedSource = "";
+
+      // 1. Look up in Outstanding_Log map
+      for (const k of driverKeys) {
+        const rec = outstandingLogMap.get(k);
+        if (rec) {
+          if (weeklyOSVal === null && rec.weeklyOS !== undefined) weeklyOSVal = rec.weeklyOS;
+          if (currentOSVal === null && rec.currentOS !== undefined) currentOSVal = rec.currentOS;
+          if (totalOSVal === null && rec.totalOS !== undefined) totalOSVal = rec.totalOS;
+          resolvedSource = rec.sourceSheet;
+          if (weeklyOSVal !== null) break;
+        }
+      }
+
+      // 2. Look up in Weekly_Hissab / Driver_Weekly_Summary map
+      if (weeklyOSVal === null) {
+        for (const k of driverKeys) {
+          const rec = weeklyHissabMap.get(k);
+          if (rec) {
+            if (weeklyOSVal === null && rec.weeklyOS !== undefined) weeklyOSVal = rec.weeklyOS;
+            if (currentOSVal === null && rec.currentOS !== undefined) currentOSVal = rec.currentOS;
+            if (totalOSVal === null && rec.totalOS !== undefined) totalOSVal = rec.totalOS;
+            if (!resolvedSource) resolvedSource = rec.sourceSheet;
+            if (weeklyOSVal !== null) break;
+          }
+        }
+      }
+
+      // 3. Fallback for Current Outstanding from Daily_Hissab map
+      if (currentOSVal === null) {
+        for (const k of driverKeys) {
+          const val = dailyHissabMap.get(k);
+          if (val !== undefined && val !== null) {
+            currentOSVal = val;
+            break;
+          }
+        }
+      }
+
+      const curOutstanding = currentOSVal !== null && !isNaN(currentOSVal) ? currentOSVal : 0;
+      const lastWeekOutstanding = weeklyOSVal !== null && !isNaN(weeklyOSVal) ? weeklyOSVal : 0;
+      const totalOut = totalOSVal !== null && !isNaN(totalOSVal) ? totalOSVal : (curOutstanding + lastWeekOutstanding);
+
+      if (weeklyOSVal === null || isNaN(weeklyOSVal)) {
+        console.warn(
+          `[Admin Weekly Outstanding Debug] Driver "${finalName}" (ETM: "${d.etmId || 'N/A'}", Mobile: "${d.mobile || 'N/A'}", ID: "${uniqueId}"): ` +
+          `Weekly Outstanding is missing/null/empty/NaN in Google Sheets. Displaying ₹0. Lookup keys tested: [${driverKeys.join(", ")}].`
+        );
+      } else {
+        console.log(
+          `[Admin Weekly Outstanding Debug] Driver "${finalName}" (ETM: "${d.etmId || 'N/A'}", Mobile: "${d.mobile || 'N/A'}"): ` +
+          `Successfully resolved Weekly Outstanding = ₹${lastWeekOutstanding} from sheet "${resolvedSource}".`
+        );
+      }
 
       return {
         ...d,

@@ -28,6 +28,17 @@ export default function AdminReports({ drivers = [], vehicles = [] }: AdminRepor
   const [customStartDate, setCustomStartDate] = useState<string>("");
   const [customEndDate, setCustomEndDate] = useState<string>("");
 
+  const formatCurrencyDisplay = (val: number | string | undefined | null): string => {
+    if (val === undefined || val === null || val === "" || isNaN(Number(val))) {
+      return "₹0";
+    }
+    const num = Number(val);
+    if (num < 0) {
+      return `-₹${Math.abs(num).toLocaleString("en-IN")}`;
+    }
+    return `₹${num.toLocaleString("en-IN")}`;
+  };
+
   // Helper to compute date boundaries for Week Selector
   const getDateRange = () => {
     const today = new Date();
@@ -181,7 +192,7 @@ export default function AdminReports({ drivers = [], vehicles = [] }: AdminRepor
                   <td>${d.mobile}</td>
                   <td>${d.etmId || ""}</td>
                   ${reportType === "DRIVER" ? `<td>${formatVehicleNumber(d.vehicleNumber)}</td><td>${d.status}</td>` : ""}
-                  ${reportType === "OUTSTANDING" ? `<td>₹${(d.currentOutstanding || 0).toLocaleString("en-IN")}</td><td>₹${(d.weeklyOutstanding || 0).toLocaleString("en-IN")}</td>` : ""}
+                  ${reportType === "OUTSTANDING" ? `<td>${formatCurrencyDisplay(d.currentOutstanding)}</td><td>${formatCurrencyDisplay(d.weeklyOutstanding)}</td>` : ""}
                   ${reportType === "VERIFICATION" ? `<td>${d.status}</td><td>${d.documentStatus}</td>` : ""}
                 </tr>
               `).join("")}
@@ -396,13 +407,13 @@ export default function AdminReports({ drivers = [], vehicles = [] }: AdminRepor
                       {reportType === "OUTSTANDING" && (
                         <>
                           <td className="p-3 text-right font-extrabold text-amber-700">
-                            ₹{(d.currentOutstanding || 0).toLocaleString("en-IN")}
+                            {formatCurrencyDisplay(d.currentOutstanding)}
                           </td>
                           <td className="p-3 text-right font-bold text-indigo-700">
-                            ₹{(d.weeklyOutstanding || 0).toLocaleString("en-IN")}
+                            {formatCurrencyDisplay(d.weeklyOutstanding)}
                           </td>
                           <td className="p-3 text-right font-black text-rose-700">
-                            ₹{(d.totalOutstanding || (d.currentOutstanding || 0) + (d.weeklyOutstanding || 0)).toLocaleString("en-IN")}
+                            {formatCurrencyDisplay(d.totalOutstanding !== undefined ? d.totalOutstanding : ((d.currentOutstanding || 0) + (d.weeklyOutstanding || 0)))}
                           </td>
                         </>
                       )}

@@ -360,6 +360,18 @@ export default function AdminDriverManagement({
                       ₹{(selectedDriver.currentOutstanding || 0).toLocaleString("en-IN")}
                     </p>
                   </div>
+                  <div className="p-3 bg-indigo-50 rounded-xl border border-indigo-200">
+                    <p className="text-[10px] text-indigo-800 font-bold uppercase">Weekly Outstanding</p>
+                    <p className="text-base font-extrabold text-indigo-900 mt-1">
+                      ₹{(selectedDriver.weeklyOutstanding || 0).toLocaleString("en-IN")}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-rose-50 rounded-xl border border-rose-200">
+                    <p className="text-[10px] text-rose-800 font-bold uppercase">Total Cumulative Dues</p>
+                    <p className="text-base font-extrabold text-rose-900 mt-1">
+                      ₹{(selectedDriver.totalOutstanding !== undefined ? selectedDriver.totalOutstanding : ((selectedDriver.currentOutstanding || 0) + (selectedDriver.weeklyOutstanding || 0))).toLocaleString("en-IN")}
+                    </p>
+                  </div>
                 </div>
               )}
             </motion.div>

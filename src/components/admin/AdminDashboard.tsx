@@ -45,7 +45,8 @@ export default function AdminDashboard({
   const dailyEarningsTotal = drivers.reduce((acc, d) => acc + (d.dailyEarnings || 0), 0);
   const weeklyEarningsTotal = drivers.reduce((acc, d) => acc + (d.totalEarnings || 0), 0);
   const currentOutstandingTotal = drivers.reduce((acc, d) => acc + (d.currentOutstanding || 0), 0);
-  const totalOutstandingTotal = drivers.reduce((acc, d) => acc + (d.totalOutstanding || d.currentOutstanding || 0), 0);
+  const weeklyOutstandingTotal = drivers.reduce((acc, d) => acc + (d.weeklyOutstanding || 0), 0);
+  const totalOutstandingTotal = drivers.reduce((acc, d) => acc + (d.totalOutstanding !== undefined ? d.totalOutstanding : ((d.currentOutstanding || 0) + (d.weeklyOutstanding || 0))), 0);
 
   const statsList = [
     {
@@ -120,6 +121,14 @@ export default function AdminDashboard({
       subtitle: "Due Collections",
       icon: Receipt,
       color: "bg-amber-50 text-amber-800 border-amber-200",
+      targetScreen: AdminScreen.OUTSTANDING
+    },
+    {
+      title: "Weekly Outstanding",
+      value: `₹${weeklyOutstandingTotal.toLocaleString("en-IN")}`,
+      subtitle: "Weekly Hissab Outstanding",
+      icon: Receipt,
+      color: "bg-indigo-50 text-indigo-800 border-indigo-200",
       targetScreen: AdminScreen.OUTSTANDING
     },
     {

@@ -36,9 +36,20 @@ export default function AdminOutstandingManagement({
   const [updateAmount, setUpdateAmount] = useState<string>("");
   const [updateType, setUpdateType] = useState<"DEDUCT" | "ADD" | "SET">("DEDUCT");
 
+  const formatCurrencyDisplay = (val: number | string | undefined | null): string => {
+    if (val === undefined || val === null || val === "" || isNaN(Number(val))) {
+      return "₹0";
+    }
+    const num = Number(val);
+    if (num < 0) {
+      return `-₹${Math.abs(num).toLocaleString("en-IN")}`;
+    }
+    return `₹${num.toLocaleString("en-IN")}`;
+  };
+
   const totalCurrentOutstanding = drivers.reduce((acc, d) => acc + (d.currentOutstanding || 0), 0);
   const totalWeeklyOutstanding = drivers.reduce((acc, d) => acc + (d.weeklyOutstanding || 0), 0);
-  const totalOutstanding = drivers.reduce((acc, d) => acc + (d.totalOutstanding || d.currentOutstanding || 0), 0);
+  const totalOutstanding = drivers.reduce((acc, d) => acc + (d.totalOutstanding !== undefined ? d.totalOutstanding : ((d.currentOutstanding || 0) + (d.weeklyOutstanding || 0))), 0);
 
   const filteredDrivers = drivers.filter(d =>
     d.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -91,17 +102,17 @@ export default function AdminOutstandingManagement({
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
         <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
           <p className="text-[10px] font-extrabold uppercase text-slate-400">Current Outstanding</p>
-          <p className="text-2xl font-black text-amber-600 mt-1">₹{totalCurrentOutstanding.toLocaleString("en-IN")}</p>
+          <p className="text-2xl font-black text-amber-600 mt-1">{formatCurrencyDisplay(totalCurrentOutstanding)}</p>
         </div>
 
         <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
           <p className="text-[10px] font-extrabold uppercase text-slate-400">Weekly Outstanding</p>
-          <p className="text-2xl font-black text-indigo-600 mt-1">₹{totalWeeklyOutstanding.toLocaleString("en-IN")}</p>
+          <p className="text-2xl font-black text-indigo-600 mt-1">{formatCurrencyDisplay(totalWeeklyOutstanding)}</p>
         </div>
 
         <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
           <p className="text-[10px] font-extrabold uppercase text-slate-400">Total Cumulative Dues</p>
-          <p className="text-2xl font-black text-rose-600 mt-1">₹{totalOutstanding.toLocaleString("en-IN")}</p>
+          <p className="text-2xl font-black text-rose-600 mt-1">{formatCurrencyDisplay(totalOutstanding)}</p>
         </div>
       </div>
 
@@ -138,10 +149,10 @@ export default function AdminOutstandingManagement({
                   <td className="p-3 font-mono text-slate-600">{driver.mobile}</td>
                   <td className="p-3 font-bold text-[#0D47A1]">{driver.etmId || "N/A"}</td>
                   <td className="p-3 text-right font-extrabold text-amber-700">
-                    ₹{(driver.currentOutstanding || 0).toLocaleString("en-IN")}
+                    {formatCurrencyDisplay(driver.currentOutstanding)}
                   </td>
                   <td className="p-3 text-right font-bold text-indigo-700">
-                    ₹{(driver.weeklyOutstanding || 0).toLocaleString("en-IN")}
+                    {formatCurrencyDisplay(driver.weeklyOutstanding)}
                   </td>
                   <td className="p-3 text-center">
                     <button
