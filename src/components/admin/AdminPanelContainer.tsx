@@ -11,6 +11,7 @@ import AdminVehicleManagement from "./AdminVehicleManagement";
 import AdminReports from "./AdminReports";
 import AdminNotifications from "./AdminNotifications";
 import AdminSettings from "./AdminSettings";
+import AdminWeeklyHissab from "./AdminWeeklyHissab";
 import WeeklyHissabScreen from "../WeeklyHissabScreen";
 import {
   fetchAllAdminData,
@@ -348,18 +349,9 @@ export default function AdminPanelContainer({
         )}
 
         {activeScreen === AdminScreen.WEEKLY_HISSAB && (
-          <div className="p-2 sm:p-4 bg-white min-h-screen">
-            <WeeklyHissabScreen
-              driver={currentAdminDriver || { id: "ADMIN", name: "Admin", phone: "", email: "", avatarUrl: "", licenseNumber: "", licenseExpiry: "", vehicleRegistration: "" }}
-              accessToken={accessToken}
-              msgFormatRows={msgFormatRows}
-              weeklyHissabRow={weeklyHissabRow}
-              weeklyHissabHeaders={weeklyHissabHeaders}
-              weeklyHissabRows={weeklyHissabRows}
-              allWeeklyRows={allWeeklyRows}
-              onBackToDashboard={() => setActiveScreen(AdminScreen.DASHBOARD)}
-            />
-          </div>
+          <AdminWeeklyHissab
+            accessToken={accessToken}
+          />
         )}
 
         {activeScreen === AdminScreen.REPORTS && (

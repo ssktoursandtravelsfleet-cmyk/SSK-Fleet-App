@@ -2890,6 +2890,20 @@ export async function fetchMsgFormatSheet(accessToken?: string | null): Promise<
   }
 }
 
+export async function fetchWeeklyHissabSheet(accessToken?: string | null): Promise<string[][]> {
+  try {
+    validateConfig(SPREADSHEET_ID);
+    let rows = await fetchSheetValues(SPREADSHEET_ID, "Weekly Hissab", accessToken).catch(() => []);
+    if (!rows || rows.length === 0) {
+      rows = await fetchSheetValues(SPREADSHEET_ID, "Weekly_Hissab", accessToken).catch(() => []);
+    }
+    return rows || [];
+  } catch (err) {
+    console.warn("Failed fetching Weekly Hissab sheet", err);
+    return [];
+  }
+}
+
 function isValidDriverName(name?: string): boolean {
   if (!name || !name.trim()) return false;
   const clean = name.trim().toUpperCase();
