@@ -1277,7 +1277,7 @@ export default function App() {
             }}
           >
             {/* Round Mini SSK Logo Icon */}
-            <SSKLogo className="w-9 h-9 shrink-0 drop-shadow-md rounded-full overflow-hidden" />
+            <SSKLogo className="w-9 h-9 shrink-0 drop-shadow-md" />
             
             {/* Notification Text Detail */}
             <div className="flex-1 min-w-0">
@@ -1324,7 +1324,7 @@ export default function App() {
             <div className="p-4 bg-[#0D47A1] text-white flex items-center justify-between border-b border-blue-900 shrink-0 h-16">
               {!isDriverSidebarCollapsed ? (
                 <div className="flex items-center gap-3 overflow-hidden">
-                  <SSKLogo className="w-9 h-9 shrink-0 drop-shadow-md rounded-full overflow-hidden" />
+                  <SSKLogo className="w-9 h-9 shrink-0 drop-shadow-md" />
                   <div className="min-w-0">
                     <h3 className="font-extrabold text-xs text-white truncate">SSK Fleet</h3>
                     <p className="text-[10px] text-blue-200 font-bold uppercase tracking-wider truncate">Driver Portal</p>
@@ -1332,7 +1332,7 @@ export default function App() {
                 </div>
               ) : (
                 <div className="w-full flex justify-center">
-                  <SSKLogo className="w-9 h-9 shrink-0 drop-shadow-md rounded-full overflow-hidden" />
+                  <SSKLogo className="w-9 h-9 shrink-0 drop-shadow-md" />
                 </div>
               )}
               <button

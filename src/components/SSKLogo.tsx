@@ -1,5 +1,5 @@
 import React from "react";
-import sskLogoImg from "../assets/images/ssk_official_logo_1786120708450.jpg";
+import sskLogoImg from "../assets/images/ssk_official_logo_transparent.png";
 
 interface SSKLogoProps {
   className?: string;
