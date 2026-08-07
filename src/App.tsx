@@ -24,6 +24,7 @@ import WeeklyHissabScreen from "./components/WeeklyHissabScreen";
 import ProfileScreen from "./components/ProfileScreen";
 import HelpSupportScreen from "./components/HelpSupportScreen";
 import AdminPanelContainer from "./components/admin/AdminPanelContainer";
+import SSKLogo from "./components/SSKLogo";
 
 import { ActiveScreen, NotificationItem, VehicleDocument, TransactionItem, DriverDetails, PaymentRecord, DriverDocumentRecord } from "./types";
 import { mockDriver, mockDocuments, mockNotifications, mockTransactions } from "./data";
@@ -1275,10 +1276,8 @@ export default function App() {
               setPushNotification(null);
             }}
           >
-            {/* Round Mini SSK Favicon Icon */}
-            <div className="w-9 h-9 shrink-0 rounded-full bg-[#08182D] border border-amber-400/50 flex items-center justify-center shadow-inner">
-              <span className="text-[10px] font-black text-amber-400 tracking-tighter">SSK</span>
-            </div>
+            {/* Round Mini SSK Logo Icon */}
+            <SSKLogo className="w-9 h-9 shrink-0 drop-shadow-md rounded-full overflow-hidden" />
             
             {/* Notification Text Detail */}
             <div className="flex-1 min-w-0">
@@ -1325,9 +1324,7 @@ export default function App() {
             <div className="p-4 bg-[#0D47A1] text-white flex items-center justify-between border-b border-blue-900 shrink-0 h-16">
               {!isDriverSidebarCollapsed ? (
                 <div className="flex items-center gap-3 overflow-hidden">
-                  <div className="w-9 h-9 rounded-xl bg-amber-400 text-slate-900 flex items-center justify-center font-black text-xs shadow-xs shrink-0">
-                    SSK
-                  </div>
+                  <SSKLogo className="w-9 h-9 shrink-0 drop-shadow-md rounded-full overflow-hidden" />
                   <div className="min-w-0">
                     <h3 className="font-extrabold text-xs text-white truncate">SSK Fleet</h3>
                     <p className="text-[10px] text-blue-200 font-bold uppercase tracking-wider truncate">Driver Portal</p>
@@ -1335,9 +1332,7 @@ export default function App() {
                 </div>
               ) : (
                 <div className="w-full flex justify-center">
-                  <div className="w-9 h-9 rounded-xl bg-amber-400 text-slate-900 flex items-center justify-center font-black text-xs shadow-xs shrink-0">
-                    SSK
-                  </div>
+                  <SSKLogo className="w-9 h-9 shrink-0 drop-shadow-md rounded-full overflow-hidden" />
                 </div>
               )}
               <button

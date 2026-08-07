@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Wallet, Menu, Info, CreditCard, Clock, CheckCircle, AlertTriangle, Calendar, Loader2, X, QrCode, Copy, User } from "lucide-react";
+import { Wallet, Menu, Info, CreditCard, Clock, CheckCircle, AlertTriangle, Calendar, Loader2, X, QrCode, User } from "lucide-react";
 import { PaymentRecord, DriverDetails } from "../types";
 import PullToRefresh from "./PullToRefresh";
 
@@ -174,30 +174,17 @@ export default function PaymentScreen({
       return;
     }
 
-    // Generate UPI payment link with pre-filled receiver details
+    // Generate UPI payment link with pre-filled receiver details (UPI ID hidden from display)
     const receiverUpi = "9702291761-2@ybl";
     const receiverName = encodeURIComponent("SSK Fleet");
     const note = encodeURIComponent("SSK Fleet Outstanding Payment");
     const upiLink = `upi://pay?pa=${receiverUpi}&pn=${receiverName}&am=${payAmount}&tn=${note}&cu=INR`;
 
-    if (methodName === "UPI ID") {
-      try {
-        await navigator.clipboard.writeText("9702291761-2@ybl");
-        triggerNotification(
-          "UPI ID Copied! 📋",
-          "9702291761-2@ybl copied to clipboard. Paste it in your UPI app.",
-          "success"
-        );
-      } catch (err) {
-        console.warn("Failed to copy UPI ID:", err);
-      }
-    } else {
-      try {
-        window.open(upiLink, "_self");
-        window.location.href = upiLink;
-      } catch (e) {
-        console.warn("UPI deep linking issue:", e);
-      }
+    try {
+      window.open(upiLink, "_self");
+      window.location.href = upiLink;
+    } catch (e) {
+      console.warn("UPI deep linking issue:", e);
     }
 
     // Record payment into Google Sheets
@@ -444,18 +431,6 @@ export default function PaymentScreen({
               </button>
             </div>
 
-            {/* Receiver Details Banner */}
-            <div className="bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-900/50 rounded-2xl p-3 flex items-center justify-between text-xs">
-              <div>
-                <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-bold uppercase block">Receiver Name</span>
-                <span className="font-extrabold text-[#0A2540] dark:text-white text-sm">SSK Fleet</span>
-              </div>
-              <div className="text-right">
-                <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-bold uppercase block">Receiver UPI ID</span>
-                <span className="font-mono font-extrabold text-emerald-700 dark:text-emerald-300 text-xs">9702291761-2@ybl</span>
-              </div>
-            </div>
-
             {/* Driver Details Card in Modal */}
             <div className="bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/80 rounded-2xl p-3.5 flex flex-col gap-1.5 text-xs text-left">
               <div className="flex items-center justify-between text-slate-700 dark:text-slate-200">
@@ -509,145 +484,130 @@ export default function PaymentScreen({
               </div>
             </div>
 
-            {/* Payment Method Buttons */}
-            <div className="flex flex-col gap-2 pt-1">
-              {/* Google Pay */}
+            {/* Payment Method Cards */}
+            <div className="flex flex-col gap-2.5 pt-1">
+              {/* 1. Google Pay */}
               <button
                 onClick={() => handleSelectPaymentMethod("Google Pay")}
                 disabled={isSubmitting}
-                className="w-full flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-98 border border-slate-100 dark:border-slate-700/80 rounded-2xl transition-all cursor-pointer group disabled:opacity-50"
+                className="w-full flex items-center justify-between p-3.5 bg-white dark:bg-slate-800/90 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 rounded-[16px] shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group disabled:opacity-50"
               >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center border border-slate-100 shadow-2xs">
-                    <span className="text-xs font-black text-blue-600">GPay</span>
+                <div className="flex items-center gap-3.5">
+                  <div className="w-11 h-11 rounded-xl bg-slate-50 dark:bg-slate-900/80 flex items-center justify-center border border-slate-100 dark:border-slate-800 shrink-0 p-2 shadow-2xs">
+                    <svg viewBox="0 0 24 24" className="w-7 h-7">
+                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                    </svg>
                   </div>
                   <div className="flex flex-col text-left">
-                    <span className="text-xs font-black text-slate-700 dark:text-slate-200">Google Pay</span>
-                    <span className="text-[9px] text-slate-400 font-bold">Pay instantly using Google Pay</span>
+                    <span className="text-xs sm:text-sm font-extrabold text-slate-800 dark:text-slate-100">Google Pay</span>
+                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-medium">Pay instantly using Google Pay</span>
                   </div>
                 </div>
-                <div className="w-5 h-5 rounded-full bg-slate-200/50 group-hover:bg-[#0A2540] group-hover:text-white flex items-center justify-center transition-colors">
-                  <span className="text-xs">➔</span>
+                <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-700/60 group-hover:bg-[#0A2540] dark:group-hover:bg-blue-600 group-hover:text-white flex items-center justify-center transition-colors text-slate-400 dark:text-slate-300">
+                  <span className="text-xs font-bold">➔</span>
                 </div>
               </button>
 
-              {/* PhonePe */}
+              {/* 2. PhonePe */}
               <button
                 onClick={() => handleSelectPaymentMethod("PhonePe")}
                 disabled={isSubmitting}
-                className="w-full flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-98 border border-slate-100 dark:border-slate-700/80 rounded-2xl transition-all cursor-pointer group disabled:opacity-50"
+                className="w-full flex items-center justify-between p-3.5 bg-white dark:bg-slate-800/90 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 rounded-[16px] shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group disabled:opacity-50"
               >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center border border-slate-100 shadow-2xs">
-                    <span className="text-xs font-black text-indigo-600">Pe</span>
+                <div className="flex items-center gap-3.5">
+                  <div className="w-11 h-11 rounded-xl bg-purple-600 flex items-center justify-center shrink-0 shadow-2xs">
+                    <span className="text-white text-base font-black italic tracking-tighter">pe</span>
                   </div>
                   <div className="flex flex-col text-left">
-                    <span className="text-xs font-black text-slate-700 dark:text-slate-200">PhonePe</span>
-                    <span className="text-[9px] text-slate-400 font-bold">Pay instantly using PhonePe</span>
+                    <span className="text-xs sm:text-sm font-extrabold text-slate-800 dark:text-slate-100">PhonePe</span>
+                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-medium">Pay instantly using PhonePe</span>
                   </div>
                 </div>
-                <div className="w-5 h-5 rounded-full bg-slate-200/50 group-hover:bg-[#0A2540] group-hover:text-white flex items-center justify-center transition-colors">
-                  <span className="text-xs">➔</span>
+                <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-700/60 group-hover:bg-[#0A2540] dark:group-hover:bg-blue-600 group-hover:text-white flex items-center justify-center transition-colors text-slate-400 dark:text-slate-300">
+                  <span className="text-xs font-bold">➔</span>
                 </div>
               </button>
 
-              {/* Paytm */}
+              {/* 3. Paytm */}
               <button
                 onClick={() => handleSelectPaymentMethod("Paytm")}
                 disabled={isSubmitting}
-                className="w-full flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-98 border border-slate-100 dark:border-slate-700/80 rounded-2xl transition-all cursor-pointer group disabled:opacity-50"
+                className="w-full flex items-center justify-between p-3.5 bg-white dark:bg-slate-800/90 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 rounded-[16px] shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group disabled:opacity-50"
               >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center border border-slate-100 shadow-2xs">
-                    <span className="text-xs font-black text-cyan-500">Paytm</span>
+                <div className="flex items-center gap-3.5">
+                  <div className="w-11 h-11 rounded-xl bg-[#002E6E] flex items-center justify-center shrink-0 shadow-2xs">
+                    <span className="text-[#00BAF2] text-xs font-black tracking-tight">Paytm</span>
                   </div>
                   <div className="flex flex-col text-left">
-                    <span className="text-xs font-black text-slate-700 dark:text-slate-200">Paytm</span>
-                    <span className="text-[9px] text-slate-400 font-bold">Pay instantly using Paytm app</span>
+                    <span className="text-xs sm:text-sm font-extrabold text-slate-800 dark:text-slate-100">Paytm</span>
+                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-medium">Pay instantly using Paytm app</span>
                   </div>
                 </div>
-                <div className="w-5 h-5 rounded-full bg-slate-200/50 group-hover:bg-[#0A2540] group-hover:text-white flex items-center justify-center transition-colors">
-                  <span className="text-xs">➔</span>
+                <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-700/60 group-hover:bg-[#0A2540] dark:group-hover:bg-blue-600 group-hover:text-white flex items-center justify-center transition-colors text-slate-400 dark:text-slate-300">
+                  <span className="text-xs font-bold">➔</span>
                 </div>
               </button>
 
-              {/* BHIM */}
+              {/* 4. BHIM UPI */}
               <button
                 onClick={() => handleSelectPaymentMethod("BHIM")}
                 disabled={isSubmitting}
-                className="w-full flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-98 border border-slate-100 dark:border-slate-700/80 rounded-2xl transition-all cursor-pointer group disabled:opacity-50"
+                className="w-full flex items-center justify-between p-3.5 bg-white dark:bg-slate-800/90 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 rounded-[16px] shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group disabled:opacity-50"
               >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center border border-slate-100 shadow-2xs">
-                    <span className="text-xs font-black text-orange-600">BHIM</span>
+                <div className="flex items-center gap-3.5">
+                  <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-orange-500 to-emerald-600 flex items-center justify-center shrink-0 shadow-2xs">
+                    <span className="text-white text-[11px] font-black tracking-tighter">BHIM</span>
                   </div>
                   <div className="flex flex-col text-left">
-                    <span className="text-xs font-black text-slate-700 dark:text-slate-200">BHIM UPI</span>
-                    <span className="text-[9px] text-slate-400 font-bold">Pay instantly using BHIM app</span>
+                    <span className="text-xs sm:text-sm font-extrabold text-slate-800 dark:text-slate-100">BHIM UPI</span>
+                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-medium">Pay instantly using BHIM app</span>
                   </div>
                 </div>
-                <div className="w-5 h-5 rounded-full bg-slate-200/50 group-hover:bg-[#0A2540] group-hover:text-white flex items-center justify-center transition-colors">
-                  <span className="text-xs">➔</span>
+                <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-700/60 group-hover:bg-[#0A2540] dark:group-hover:bg-blue-600 group-hover:text-white flex items-center justify-center transition-colors text-slate-400 dark:text-slate-300">
+                  <span className="text-xs font-bold">➔</span>
                 </div>
               </button>
 
-              {/* Amazon Pay */}
+              {/* 5. Amazon Pay UPI */}
               <button
                 onClick={() => handleSelectPaymentMethod("Amazon Pay")}
                 disabled={isSubmitting}
-                className="w-full flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-98 border border-slate-100 dark:border-slate-700/80 rounded-2xl transition-all cursor-pointer group disabled:opacity-50"
+                className="w-full flex items-center justify-between p-3.5 bg-white dark:bg-slate-800/90 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 rounded-[16px] shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group disabled:opacity-50"
               >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center border border-slate-100 shadow-2xs">
-                    <span className="text-[10px] font-black text-amber-600">Amazon</span>
+                <div className="flex items-center gap-3.5">
+                  <div className="w-11 h-11 rounded-xl bg-[#232F3E] flex items-center justify-center shrink-0 shadow-2xs">
+                    <span className="text-[#FF9900] text-[10px] font-black tracking-tighter">amazon</span>
                   </div>
                   <div className="flex flex-col text-left">
-                    <span className="text-xs font-black text-slate-700 dark:text-slate-200">Amazon Pay UPI</span>
-                    <span className="text-[9px] text-slate-400 font-bold">Pay using Amazon Pay UPI</span>
+                    <span className="text-xs sm:text-sm font-extrabold text-slate-800 dark:text-slate-100">Amazon Pay UPI</span>
+                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-medium">Pay using Amazon Pay UPI</span>
                   </div>
                 </div>
-                <div className="w-5 h-5 rounded-full bg-slate-200/50 group-hover:bg-[#0A2540] group-hover:text-white flex items-center justify-center transition-colors">
-                  <span className="text-xs">➔</span>
+                <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-700/60 group-hover:bg-[#0A2540] dark:group-hover:bg-blue-600 group-hover:text-white flex items-center justify-center transition-colors text-slate-400 dark:text-slate-300">
+                  <span className="text-xs font-bold">➔</span>
                 </div>
               </button>
 
-              {/* UPI ID */}
-              <button
-                onClick={() => handleSelectPaymentMethod("UPI ID")}
-                disabled={isSubmitting}
-                className="w-full flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-98 border border-slate-100 dark:border-slate-700/80 rounded-2xl transition-all cursor-pointer group disabled:opacity-50"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center border border-slate-100 shadow-2xs">
-                    <span className="text-xs font-black text-emerald-600">UPI</span>
-                  </div>
-                  <div className="flex flex-col text-left">
-                    <span className="text-xs font-black text-slate-700 dark:text-slate-200">Copy UPI ID</span>
-                    <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-bold">9702291761-2@ybl</span>
-                  </div>
-                </div>
-                <div className="w-5 h-5 rounded-full bg-slate-200/50 group-hover:bg-[#0A2540] group-hover:text-white flex items-center justify-center transition-colors">
-                  <Copy className="w-3 h-3 text-slate-600 group-hover:text-white" />
-                </div>
-              </button>
-
-              {/* QR Code */}
+              {/* 6. QR Code */}
               <button
                 onClick={() => handleSelectPaymentMethod("QR Code")}
                 disabled={isSubmitting}
-                className="w-full flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-98 border border-slate-100 dark:border-slate-700/80 rounded-2xl transition-all cursor-pointer group disabled:opacity-50"
+                className="w-full flex items-center justify-between p-3.5 bg-white dark:bg-slate-800/90 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 rounded-[16px] shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group disabled:opacity-50"
               >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center border border-slate-100 shadow-2xs text-[#0A2540]">
-                    <QrCode className="w-5 h-5" />
+                <div className="flex items-center gap-3.5">
+                  <div className="w-11 h-11 rounded-xl bg-slate-100 dark:bg-slate-700/80 flex items-center justify-center shrink-0 shadow-2xs text-[#0A2540] dark:text-white">
+                    <QrCode className="w-6 h-6" />
                   </div>
                   <div className="flex flex-col text-left">
-                    <span className="text-xs font-black text-slate-700 dark:text-slate-200">QR Code</span>
-                    <span className="text-[9px] text-slate-400 font-bold">Scan QR with any UPI app</span>
+                    <span className="text-xs sm:text-sm font-extrabold text-slate-800 dark:text-slate-100">Scan QR Code</span>
+                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-medium">Scan QR with any UPI app</span>
                   </div>
                 </div>
-                <div className="w-5 h-5 rounded-full bg-slate-200/50 group-hover:bg-[#0A2540] group-hover:text-white flex items-center justify-center transition-colors">
-                  <span className="text-xs">➔</span>
+                <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-700/60 group-hover:bg-[#0A2540] dark:group-hover:bg-blue-600 group-hover:text-white flex items-center justify-center transition-colors text-slate-400 dark:text-slate-300">
+                  <span className="text-xs font-bold">➔</span>
                 </div>
               </button>
             </div>
