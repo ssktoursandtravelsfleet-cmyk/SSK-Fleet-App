@@ -28,7 +28,7 @@ import AdminPanelContainer from "./components/admin/AdminPanelContainer";
 import { ActiveScreen, NotificationItem, VehicleDocument, TransactionItem, DriverDetails, PaymentRecord, DriverDocumentRecord } from "./types";
 import { mockDriver, mockDocuments, mockNotifications, mockTransactions } from "./data";
 import { initAuth, googleSignIn, logoutUser } from "./firebase";
-import { fetchAndParseAllSheets, getCachedSheetsData, appendOnboardingDocuments, uploadBase64Image, appendDriverOnboardingData, checkMobileInDriverSheet, writePaymentLog, SPREADSHEET_ID, authenticateDriverWithSheet, updateLastLogin, updateDriverProfileInSheets, saveDriverDocumentsToSheet, fetchDriverDocumentsFromSheet } from "./lib/sheets";
+import { fetchAndParseAllSheets, getCachedSheetsData, appendOnboardingDocuments, uploadBase64Image, appendDriverOnboardingData, checkMobileInDriverSheet, writePaymentLog, SPREADSHEET_ID, authenticateDriverWithSheet, updateLastLogin, updateDriverProfileInSheets, saveDriverDocumentsToSheet, fetchDriverDocumentsFromSheet, resolveDriverDisplayName } from "./lib/sheets";
 import { DISPLAY_VERSION } from "./lib/version";
 
 export default function App() {
@@ -242,16 +242,20 @@ export default function App() {
 
           const userRole: "driver" | "admin" = isSessionAdmin ? "admin" : "driver";
 
+          const sessionName = resolveDriverDisplayName(session, session.Mobile_Number, session.ETM);
           const restoredDriver: DriverDetails = {
-            id: session.Driver_ID,
-            name: session.Name || (userRole === "admin" ? "Admin User" : `Driver ${session.Driver_ID}`),
+            id: session.Driver_ID || `DR-${session.Mobile_Number}`,
+            name: sessionName,
+            Name: sessionName,
+            Driver_Name: sessionName,
             phone: session.Mobile_Number,
             email: "",
-            avatarUrl: "",
+            avatarUrl: session.Photo || "",
             licenseNumber: "",
             licenseExpiry: "",
             vehicleRegistration: "",
-            status: session.Status,
+            status: session.Status || "Active",
+            Status: session.Status || "Active",
             etm: session.ETM,
             lastLogin: session.Last_Login,
             role: userRole,
@@ -275,21 +279,35 @@ export default function App() {
             setAccessToken(token);
           }
 
+          // Fetch driver document record for profile photo
+          fetchDriverDocumentsFromSheet(session.Mobile_Number || session.ETM || session.Driver_ID || "", token)
+            .then((docRec) => {
+              if (docRec) {
+                setDocumentRecord(docRec);
+              }
+            })
+            .catch((docErr) => console.error("Failed to fetch driver documents record on session restore:", docErr));
+
           setSyncState("syncing");
           fetchAndParseAllSheets(token, session.Mobile_Number, session.Driver_ID)
             .then((result) => {
               if (result.driver) {
-                setDriver((prev) => ({
-                  ...prev,
-                  ...result.driver,
-                  name: prev.name || result.driver?.name || session.Name || "",
-                  role: userRole,
-                  User_Type: userRole,
-                  Role: session.Role || (userRole === "admin" ? "Admin" : "Driver"),
-                  Branch: session.Branch || "",
-                  Department: session.Department || "",
-                  Permissions: session.Permissions || ""
-                }));
+                setDriver((prev) => {
+                  const resolvedName = resolveDriverDisplayName(result.driver, session.Mobile_Number, session.ETM || result.driver?.etm);
+                  return {
+                    ...prev,
+                    ...result.driver,
+                    name: resolvedName,
+                    Name: resolvedName,
+                    Driver_Name: resolvedName,
+                    role: userRole,
+                    User_Type: userRole,
+                    Role: session.Role || (userRole === "admin" ? "Admin" : "Driver"),
+                    Branch: session.Branch || "",
+                    Department: session.Department || "",
+                    Permissions: session.Permissions || ""
+                  };
+                });
               }
               setTransactions(result.transactions);
               setDocuments(result.documents);
@@ -442,16 +460,20 @@ export default function App() {
             ? "admin"
             : "driver";
 
+        const resolvedLoginName = resolveDriverDisplayName(driverData, mobile, driverData.ETM);
         const updatedDriver: DriverDetails = {
           id: driverData.Driver_ID,
-          name: driverData.Name || (userRole === "admin" ? "Admin User" : `Driver ${driverData.Driver_ID}`),
-          phone: driverData.Mobile_Number,
+          name: resolvedLoginName,
+          Name: resolvedLoginName,
+          Driver_Name: resolvedLoginName,
+          phone: driverData.Mobile_Number || mobile,
           email: "",
           avatarUrl: "",
           licenseNumber: "",
           licenseExpiry: "",
           vehicleRegistration: "",
-          status: driverData.Status,
+          status: driverData.Status || "Active",
+          Status: driverData.Status || "Active",
           etm: driverData.ETM,
           lastLogin: driverData.Last_Login,
           role: userRole,
@@ -463,20 +485,34 @@ export default function App() {
         };
         setDriver(updatedDriver);
 
+        // Fetch document record for profile photo
+        fetchDriverDocumentsFromSheet(mobile || driverData.ETM || driverData.Driver_ID || "", accessToken)
+          .then((docRec) => {
+            if (docRec) {
+              setDocumentRecord(docRec);
+            }
+          })
+          .catch((docErr) => console.error("Failed to fetch driver document record after login:", docErr));
+
         // 4. Load all driver-specific sheets (earnings, payments, documents, etc.)
         const syncResult = await fetchAndParseAllSheets(accessToken, mobile, driverData.Driver_ID);
         if (syncResult.driver) {
-          setDriver((prev) => ({
-            ...prev,
-            ...syncResult.driver,
-            name: prev.name || syncResult.driver?.name || driverData.Name || "",
-            role: userRole,
-            User_Type: userRole,
-            Role: driverData.Role || (userRole === "admin" ? "Admin" : "Driver"),
-            Branch: driverData.Branch || "",
-            Department: driverData.Department || "",
-            Permissions: driverData.Permissions || ""
-          }));
+          setDriver((prev) => {
+            const finalName = resolveDriverDisplayName(syncResult.driver, mobile, driverData.ETM || syncResult.driver?.etm);
+            return {
+              ...prev,
+              ...syncResult.driver,
+              name: finalName,
+              Name: finalName,
+              Driver_Name: finalName,
+              role: userRole,
+              User_Type: userRole,
+              Role: driverData.Role || (userRole === "admin" ? "Admin" : "Driver"),
+              Branch: driverData.Branch || "",
+              Department: driverData.Department || "",
+              Permissions: driverData.Permissions || ""
+            };
+          });
         }
         setTransactions(syncResult.transactions);
         setDocuments(syncResult.documents);
@@ -1207,6 +1243,14 @@ export default function App() {
     !isAuthScreen &&
     activeScreen !== ActiveScreen.ADMIN_PANEL;
 
+  // Derived Driver Info for Sidebar / Drawer
+  const drawerDriverName = resolveDriverDisplayName(driver, phoneNumber || driver?.phone, driver?.etm);
+  const rawDriverStatus = (driver?.Status || driver?.status || "Active").trim();
+  const drawerDriverStatus = rawDriverStatus.toLowerCase() === "inactive" ? "Inactive" : rawDriverStatus.toLowerCase() === "suspended" ? "Suspended" : "Active";
+  const drawerDriverEtm = (driver?.etm || driver?.ETM || driver?.etmId || "").trim();
+  const drawerDriverPhone = (driver?.phone || driver?.Mobile_Number || phoneNumber || "").trim();
+  const drawerProfilePhoto = documentRecord?.profilePhotoUrl || driver?.avatarUrl || driver?.vehiclePhoto || "";
+
   return (
     <PhoneFrame>
       {/* Sliding In-App Push Notification Banner */}
@@ -1307,13 +1351,39 @@ export default function App() {
 
             {/* Driver Profile Summary Card */}
             {!isDriverSidebarCollapsed && (
-              <div className="p-3.5 mx-3 mt-3 bg-slate-800/80 rounded-2xl border border-slate-700/60 flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-blue-600/40 text-blue-300 border border-blue-400/30 flex items-center justify-center font-bold text-xs shrink-0">
-                  {(driver.name || "D").charAt(0).toUpperCase()}
+              <div className="p-3.5 mx-3 mt-3 bg-slate-800/80 rounded-2xl border border-slate-700/60 flex items-center gap-3" id="desktop-sidebar-driver-profile">
+                <div className="w-10 h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center overflow-hidden shrink-0 shadow-xs">
+                  {drawerProfilePhoto ? (
+                    <img
+                      src={drawerProfilePhoto}
+                      alt={drawerDriverName}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  ) : (
+                    <ProfileIcon className="w-5 h-5 text-blue-200" />
+                  )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h4 className="text-xs font-bold text-white truncate">{driver.name}</h4>
-                  <p className="text-[10px] font-mono text-slate-400 truncate">{driver.phone}</p>
+                  <div className="flex items-center gap-1 mb-0.5">
+                    <span
+                      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase ${
+                        drawerDriverStatus === "Active"
+                          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-400/30"
+                          : "bg-rose-500/20 text-rose-300 border border-rose-400/30"
+                      }`}
+                      id="desktop-driver-status"
+                    >
+                      <span className={`w-1 h-1 rounded-full ${drawerDriverStatus === "Active" ? "bg-emerald-400 animate-pulse" : "bg-rose-400"}`} />
+                      {drawerDriverStatus}
+                    </span>
+                  </div>
+                  <h4 className="text-xs font-bold text-white truncate" id="desktop-driver-name">{drawerDriverName}</h4>
+                  <p className="text-[10px] font-mono text-blue-200 truncate" id="desktop-driver-etm">
+                    {drawerDriverEtm && drawerDriverEtm.toUpperCase() !== "N/A" ? `ETM: ${drawerDriverEtm}` : drawerDriverPhone}
+                  </p>
                 </div>
               </div>
             )}
@@ -1416,9 +1486,51 @@ export default function App() {
               id="drawer-menu"
             >
               {/* Drawer Header with Profile Summary */}
-              <div className="p-6 bg-[#0D47A1] text-white border-b border-slate-800/50 flex flex-col gap-1">
-                <h3 className="text-sm font-extrabold tracking-tight text-white">{driver.name}</h3>
-                <p className="text-[10px] text-blue-200 font-medium tracking-wide uppercase">Driver Partner</p>
+              <div className="p-5 bg-[#0D47A1] text-white border-b border-slate-800/50 flex items-center gap-3.5" id="drawer-header-profile">
+                {/* Profile Photo / Avatar */}
+                <div className="w-12 h-12 rounded-full bg-white/10 border border-white/20 flex items-center justify-center overflow-hidden shrink-0 shadow-md">
+                  {drawerProfilePhoto ? (
+                    <img
+                      src={drawerProfilePhoto}
+                      alt={drawerDriverName}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  ) : (
+                    <ProfileIcon className="w-6 h-6 text-blue-200" />
+                  )}
+                </div>
+
+                {/* Driver Details */}
+                <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <span
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
+                        drawerDriverStatus === "Active"
+                          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-400/30"
+                          : "bg-rose-500/20 text-rose-300 border border-rose-400/30"
+                      }`}
+                      id="drawer-driver-status"
+                    >
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          drawerDriverStatus === "Active" ? "bg-emerald-400 animate-pulse" : "bg-rose-400"
+                        }`}
+                      />
+                      {drawerDriverStatus}
+                    </span>
+                  </div>
+
+                  <h3 className="text-base font-extrabold tracking-tight text-white truncate leading-tight" id="drawer-driver-name">
+                    {drawerDriverName}
+                  </h3>
+
+                  <p className="text-[11px] text-blue-200 font-medium font-mono truncate leading-tight" id="drawer-driver-etm">
+                    {drawerDriverEtm && drawerDriverEtm.toUpperCase() !== "N/A" ? `ETM: ${drawerDriverEtm}` : "Driver Partner"}
+                  </p>
+                </div>
               </div>
 
               {/* Navigation Items */}

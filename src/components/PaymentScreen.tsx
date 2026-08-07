@@ -175,17 +175,17 @@ export default function PaymentScreen({
     }
 
     // Generate UPI payment link with pre-filled receiver details
-    const receiverUpi = "9702291761@sbi";
+    const receiverUpi = "9702291761-2@ybl";
     const receiverName = encodeURIComponent("SSK Fleet");
     const note = encodeURIComponent("SSK Fleet Outstanding Payment");
     const upiLink = `upi://pay?pa=${receiverUpi}&pn=${receiverName}&am=${payAmount}&tn=${note}&cu=INR`;
 
     if (methodName === "UPI ID") {
       try {
-        await navigator.clipboard.writeText("9702291761@sbi");
+        await navigator.clipboard.writeText("9702291761-2@ybl");
         triggerNotification(
           "UPI ID Copied! 📋",
-          "9702291761@sbi copied to clipboard. Paste it in your UPI app.",
+          "9702291761-2@ybl copied to clipboard. Paste it in your UPI app.",
           "success"
         );
       } catch (err) {
@@ -236,7 +236,7 @@ export default function PaymentScreen({
   };
 
   const upiQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
-    `upi://pay?pa=9702291761@sbi&pn=SSK Fleet&am=${parseFloat(enteredAmount) || Math.abs(amount) || 0}&tn=SSK Fleet Outstanding Payment&cu=INR`
+    `upi://pay?pa=9702291761-2@ybl&pn=SSK Fleet&am=${parseFloat(enteredAmount) || Math.abs(amount) || 0}&tn=SSK Fleet Outstanding Payment&cu=INR`
   )}`;
 
   return (
@@ -452,7 +452,7 @@ export default function PaymentScreen({
               </div>
               <div className="text-right">
                 <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-bold uppercase block">Receiver UPI ID</span>
-                <span className="font-mono font-extrabold text-emerald-700 dark:text-emerald-300 text-xs">9702291761@sbi</span>
+                <span className="font-mono font-extrabold text-emerald-700 dark:text-emerald-300 text-xs">9702291761-2@ybl</span>
               </div>
             </div>
 
@@ -623,7 +623,7 @@ export default function PaymentScreen({
                   </div>
                   <div className="flex flex-col text-left">
                     <span className="text-xs font-black text-slate-700 dark:text-slate-200">Copy UPI ID</span>
-                    <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-bold">9702291761@sbi</span>
+                    <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-bold">9702291761-2@ybl</span>
                   </div>
                 </div>
                 <div className="w-5 h-5 rounded-full bg-slate-200/50 group-hover:bg-[#0A2540] group-hover:text-white flex items-center justify-center transition-colors">
@@ -695,7 +695,7 @@ export default function PaymentScreen({
                 Receiver: <strong className="text-[#0A2540] dark:text-white">SSK Fleet</strong>
               </p>
               <p className="text-[11px] text-slate-600 dark:text-slate-300 font-semibold">
-                UPI VPA: <strong className="text-emerald-600 dark:text-emerald-400 font-mono">9702291761@sbi</strong>
+                UPI VPA: <strong className="text-emerald-600 dark:text-emerald-400 font-mono">9702291761-2@ybl</strong>
               </p>
               <p className="text-[9px] text-slate-400 font-medium">
                 Note: SSK Fleet Outstanding Payment

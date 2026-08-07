@@ -596,6 +596,84 @@ export function getCachedSheetsData(): SSKSyncResult | null {
   return null;
 }
 
+export function resolveDriverDisplayName(
+  driver?: Partial<DriverDetails> | null,
+  fallbackMobile?: string,
+  fallbackEtm?: string
+): string {
+  if (!driver && !fallbackMobile && !fallbackEtm) {
+    return "Driver";
+  }
+
+  const candidates = [
+    driver?.Name,
+    driver?.Driver_Name,
+    driver?.name,
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate && typeof candidate === "string") {
+      const trimmed = candidate.trim();
+      const lower = trimmed.toLowerCase();
+      if (
+        trimmed !== "" &&
+        !lower.includes("not found") &&
+        !lower.includes("pending name") &&
+        lower !== "null" &&
+        lower !== "undefined"
+      ) {
+        return trimmed;
+      }
+    }
+  }
+
+  // Try parsing from saved session in localStorage
+  try {
+    if (typeof localStorage !== "undefined") {
+      const savedSessionStr = localStorage.getItem("mobile_login_session");
+      if (savedSessionStr) {
+        const session = JSON.parse(savedSessionStr);
+        const sessionCandidates = [session?.Name, session?.Driver_Name, session?.name];
+        for (const candidate of sessionCandidates) {
+          if (candidate && typeof candidate === "string") {
+            const trimmed = candidate.trim();
+            const lower = trimmed.toLowerCase();
+            if (
+              trimmed !== "" &&
+              !lower.includes("not found") &&
+              !lower.includes("pending name") &&
+              lower !== "null" &&
+              lower !== "undefined"
+            ) {
+              return trimmed;
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("[Driver Profile] Failed reading saved session for name fallback:", e);
+  }
+
+  const phone = driver?.phone || (driver as Record<string, any>)?.Mobile_Number || fallbackMobile;
+  if (phone && String(phone).trim()) {
+    const cleanPhone = String(phone).trim();
+    if (cleanPhone) {
+      return `Driver (${cleanPhone})`;
+    }
+  }
+
+  const etm = driver?.etm || (driver as Record<string, any>)?.ETM || fallbackEtm;
+  if (etm && String(etm).trim()) {
+    const cleanEtm = String(etm).trim();
+    if (cleanEtm && cleanEtm.toUpperCase() !== "N/A") {
+      return `Driver (${cleanEtm})`;
+    }
+  }
+
+  return "Driver";
+}
+
 export async function fetchAndParseAllSheets(
   accessToken?: string | null,
   loggedMobile?: string,
@@ -650,58 +728,73 @@ export async function fetchAndParseAllSheets(
     const driverMasterRows = driverRaw;
     let matchedDriver: DriverDetails | null = null;
     
-    // Find Driver_Master row where Driver_Master["Driver ID"] === LoggedInUser.Driver_ID
+    // 1. Try finding Driver_Master row by Driver ID
     if (driverId) {
-      matchedDriver = drivers.find(d => d.id && String(d.id).trim() === String(driverId).trim()) || null;
+      matchedDriver = drivers.find(d => d.id && String(d.id).trim().toUpperCase() === String(driverId).trim().toUpperCase()) || null;
     }
 
-    // DEBUG LOGS EXACTLY AS REQUESTED
+    // 2. Secondary match: Try finding by mobile number
+    if (!matchedDriver && loggedMobile) {
+      const normMobile = loggedMobile.replace(/\D/g, "").slice(-10);
+      if (normMobile) {
+        matchedDriver = drivers.find(d => {
+          const p = (d.phone || (d as Record<string, any>).Mobile_Number || "").replace(/\D/g, "").slice(-10);
+          return p && p === normMobile;
+        }) || null;
+      }
+    }
+
+    // 3. Tertiary match: Try finding by ETM ID
+    if (!matchedDriver && loggedDriverId) {
+      matchedDriver = drivers.find(d => d.etm && String(d.etm).trim().toUpperCase() === String(loggedDriverId).trim().toUpperCase()) || null;
+    }
+
+    // DEBUG LOGS
     console.log("Driver_ID from login:", driverId);
+    console.log("Logged Mobile from login:", loggedMobile);
     console.log("Driver_Master rows:", driverMasterRows.length);
     console.log("Matched row:", matchedDriver);
-    console.log("Driver Name:", matchedDriver?.Name);
-    console.log("Driver ID:", driverId);
-    console.log("Driver Status:", matchedDriver?.Status);
 
     if (!matchedDriver) {
-      console.log("Driver_ID not found in Driver_Master");
-    }
-
-    if (!matchedDriver) {
+      console.warn("[Driver Profile] Driver record not found in Driver_Master via ID/Mobile/ETM. Resolving fallback profile...");
+      const fallbackName = resolveDriverDisplayName(null, loggedMobile, driverId);
       matchedDriver = {
-        id: driverId || "DL-unknown",
-        name: "Driver not found in Driver_Master",
-        Name: "Driver not found in Driver_Master",
-        Driver_Name: "Driver not found in Driver_Master",
+        id: driverId || (loggedMobile ? `DR-${loggedMobile}` : "DL-unknown"),
+        name: fallbackName,
+        Name: fallbackName,
+        Driver_Name: fallbackName,
         phone: loggedMobile || "",
         email: "",
         avatarUrl: "",
         licenseNumber: "",
         licenseExpiry: "",
         vehicleRegistration: "N/A",
-        status: "Inactive",
-        Status: "Inactive",
+        status: "Active",
+        Status: "Active",
         etm: "N/A"
       };
     } else {
-      // Synchronize Name, Driver_Name, and name
-      if (matchedDriver.Name) {
-        matchedDriver.name = matchedDriver.Name;
-        matchedDriver.Driver_Name = matchedDriver.Name;
-      } else if (matchedDriver.Driver_Name) {
-        matchedDriver.Name = matchedDriver.Driver_Name;
-        matchedDriver.name = matchedDriver.Driver_Name;
-      } else if (matchedDriver.name) {
-        matchedDriver.Name = matchedDriver.name;
-        matchedDriver.Driver_Name = matchedDriver.name;
-      }
+      const resolvedName = resolveDriverDisplayName(matchedDriver, loggedMobile, driverId);
+      matchedDriver.name = resolvedName;
+      matchedDriver.Name = resolvedName;
+      matchedDriver.Driver_Name = resolvedName;
 
       // Synchronize Status and status
       if (matchedDriver.Status) {
         matchedDriver.status = matchedDriver.Status;
       } else if (matchedDriver.status) {
         matchedDriver.Status = matchedDriver.status;
+      } else {
+        matchedDriver.status = "Active";
+        matchedDriver.Status = "Active";
       }
+
+      console.log("[Driver Profile] Driver profile successfully loaded from Driver_Master:", {
+        name: matchedDriver.name,
+        id: matchedDriver.id,
+        status: matchedDriver.status,
+        etm: matchedDriver.etm
+      });
     }
 
     // Match vehicle assignment from Vehicle_Master if available
