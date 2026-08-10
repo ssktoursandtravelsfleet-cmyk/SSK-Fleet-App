@@ -313,7 +313,13 @@ export default function App() {
               }
               setTransactions(result.transactions);
               setDocuments(result.documents);
-              setNotifications(result.notifications);
+              if (result.notifications && result.notifications.length > 0) {
+                setNotifications((prev) => {
+                  const existingIds = new Set(prev.map((n) => n.id));
+                  const newSheetsNotifs = result.notifications.filter((n) => !existingIds.has(n.id));
+                  return newSheetsNotifs.length > 0 ? [...prev, ...newSheetsNotifs] : prev;
+                });
+              }
               setPayments(result.payments || []);
               setOutstandingAmount(result.outstandingAmount !== undefined ? result.outstandingAmount : 0);
               setLastWeekOutstanding(result.lastWeekOutstanding !== undefined ? result.lastWeekOutstanding : 0);
@@ -369,23 +375,20 @@ export default function App() {
 
   // Real-time Firestore notification listener for the logged-in driver
   useEffect(() => {
-    const driverEtm = driver?.etm || (driver as any)?.ETM || driver?.id || "";
-    const driverPhone = phoneNumber || driver?.phone || "";
+    const driverEtm = driver?.etm || (driver as any)?.ETM || (driver as any)?.etmId || driver?.id || "";
+    const driverPhone = phoneNumber || driver?.phone || (driver as any)?.mobile || "";
     const driverIdStr = driver?.id || "";
+
+    console.log("APP NOTIFICATION EFFECT TRIGGERED FOR DRIVER:", { driverEtm, driverPhone, driverIdStr });
 
     const unsubscribe = subscribeToDriverNotifications(
       driverEtm,
       driverPhone,
       driverIdStr,
       (realtimeNotifs) => {
-        if (realtimeNotifs && realtimeNotifs.length >= 0) {
-          setNotifications((prev) => {
-            // Keep any existing items if real-time snapshot is active or update directly
-            if (realtimeNotifs.length === 0 && prev.length > 0) {
-              return prev;
-            }
-            return realtimeNotifs;
-          });
+        if (realtimeNotifs) {
+          console.log("SETTING REALTIME FIRESTORE NOTIFICATIONS IN APP STATE:", realtimeNotifs.length);
+          setNotifications(realtimeNotifs);
         }
       },
       (err) => {
@@ -396,7 +399,7 @@ export default function App() {
     return () => {
       unsubscribe();
     };
-  }, [driver?.etm, (driver as any)?.ETM, driver?.id, driver?.phone, phoneNumber]);
+  }, [driver?.etm, (driver as any)?.ETM, (driver as any)?.etmId, driver?.id, driver?.phone, (driver as any)?.mobile, phoneNumber]);
 
   // Periodic Google Sheets sync interval (every 30 seconds)
   useEffect(() => {
@@ -555,7 +558,13 @@ export default function App() {
         }
         setTransactions(syncResult.transactions);
         setDocuments(syncResult.documents);
-        setNotifications(syncResult.notifications);
+        if (syncResult.notifications && syncResult.notifications.length > 0) {
+          setNotifications((prev) => {
+            const existingIds = new Set(prev.map((n) => n.id));
+            const newNotifs = syncResult.notifications.filter((n) => !existingIds.has(n.id));
+            return newNotifs.length > 0 ? [...prev, ...newNotifs] : prev;
+          });
+        }
         setPayments(syncResult.payments || []);
         setOutstandingAmount(syncResult.outstandingAmount !== undefined ? syncResult.outstandingAmount : 0);
         setLastWeekOutstanding(syncResult.lastWeekOutstanding !== undefined ? syncResult.lastWeekOutstanding : 0);
@@ -1033,7 +1042,13 @@ export default function App() {
       }
       setTransactions(result.transactions);
       setDocuments(result.documents);
-      setNotifications(result.notifications);
+      if (result.notifications && result.notifications.length > 0) {
+        setNotifications((prev) => {
+          const existingIds = new Set(prev.map((n) => n.id));
+          const newNotifs = result.notifications.filter((n) => !existingIds.has(n.id));
+          return newNotifs.length > 0 ? [...prev, ...newNotifs] : prev;
+        });
+      }
       setPayments(result.payments || []);
       setOutstandingAmount(result.outstandingAmount !== undefined ? result.outstandingAmount : 0);
       setLastWeekOutstanding(result.lastWeekOutstanding !== undefined ? result.lastWeekOutstanding : 0);

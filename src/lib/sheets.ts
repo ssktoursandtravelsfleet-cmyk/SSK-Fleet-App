@@ -442,8 +442,8 @@ export async function fetchSheetValues(spreadsheetId: string, sheetName: string,
     sheetValuesCache.set(cacheKey, { timestamp: Date.now(), data: values });
     return values;
   } catch (publicErr) {
-    console.error(`Both authenticated and public fetch failed for sheet ${sheetName}:`, publicErr);
-    throw publicErr;
+    console.warn(`Both authenticated and public fetch failed for sheet ${sheetName}:`, publicErr);
+    return cached?.data || [];
   }
 }
 

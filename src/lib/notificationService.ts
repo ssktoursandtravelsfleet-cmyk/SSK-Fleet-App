@@ -2,6 +2,7 @@ import {
   collection,
   doc,
   setDoc,
+  getDoc,
   updateDoc,
   onSnapshot,
   getDocs,
@@ -48,9 +49,9 @@ export async function dispatchDriverNotification(params: SendNotificationParams)
     throw new Error("Notification title and message content are required.");
   }
 
-  const cleanEtm = (targetDriverEtm || "ALL").trim().toUpperCase();
-  const cleanName = (targetDriverName || "All Fleet Drivers").trim();
-  const cleanMobile = (mobileNumber || "").replace(/\D/g, "").slice(-10);
+  const cleanEtm = String(targetDriverEtm || "ALL").trim().toUpperCase();
+  const cleanName = String(targetDriverName || "All Fleet Drivers").trim();
+  const cleanMobile = String(mobileNumber || "").replace(/\D/g, "").slice(-10);
   const now = new Date();
   const notifId = `NOTIF_${now.getTime()}_${Math.floor(1000 + Math.random() * 9000)}`;
   const nowFormatted = now.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
@@ -73,11 +74,20 @@ export async function dispatchDriverNotification(params: SendNotificationParams)
     createdBy: createdBy || "Admin Manager"
   };
 
+  console.log("DISPATCHING DRIVER NOTIFICATION TO FIRESTORE:", notifData);
+
   try {
     // 1. PRIMARY WRITE: Store directly in Firebase Firestore database
     const docRef = doc(db, "driver_notifications", notifId);
     await setDoc(docRef, notifData);
-    console.info("Successfully written notification to Firestore:", notifId);
+
+    // 1b. VERIFY WRITE: Verify document exists in Firestore
+    const verifySnap = await getDoc(docRef);
+    if (!verifySnap.exists()) {
+      throw new Error("Document write verification failed on Firestore.");
+    }
+
+    console.info("Successfully written & verified notification in Firestore:", notifId, verifySnap.data());
 
     // 2. SECONDARY WRITE: Append to Google Sheets for audit / backup log
     sendAdminNotificationToSheet(
@@ -104,7 +114,7 @@ export async function dispatchDriverNotification(params: SendNotificationParams)
     };
   } catch (firestoreErr: any) {
     console.error("CRITICAL: Failed to write notification to Firestore:", firestoreErr);
-    
+
     // Fallback: Try Google Sheets if Firestore fails
     try {
       const sheetRes = await sendAdminNotificationToSheet(
@@ -142,9 +152,11 @@ export function subscribeToDriverNotifications(
   onUpdate?: (notifications: NotificationItem[]) => void,
   onError?: (err: any) => void
 ): () => void {
-  const cleanEtm = (driverEtm || "").trim().toUpperCase();
-  const cleanId = (driverId || "").trim().toUpperCase();
-  const cleanMobile = (driverMobile || "").replace(/\D/g, "").slice(-10);
+  const cleanEtm = String(driverEtm || "").trim().toUpperCase();
+  const cleanId = String(driverId || "").trim().toUpperCase();
+  const cleanMobile = String(driverMobile || "").replace(/\D/g, "").slice(-10);
+
+  console.log("SUBSCRIBING TO DRIVER NOTIFICATIONS WITH KEYS:", { cleanEtm, cleanId, cleanMobile });
 
   const notifCollectionRef = collection(db, "driver_notifications");
 
@@ -157,8 +169,8 @@ export function subscribeToDriverNotifications(
         const data = docSnap.data();
         if (!data) return;
 
-        const targetEtm = (data.recipientId || data.driverId || data.etmId || "ALL").toString().trim().toUpperCase();
-        const targetMobile = (data.mobileNumber || "").toString().replace(/\D/g, "").slice(-10);
+        const targetEtm = String(data.recipientId || data.driverId || data.etmId || "ALL").trim().toUpperCase();
+        const targetMobile = String(data.mobileNumber || "").replace(/\D/g, "").slice(-10);
 
         // Matching logic for the logged-in driver:
         let isMatch = false;
@@ -182,7 +194,7 @@ export function subscribeToDriverNotifications(
 
         if (isMatch) {
           let normType: "info" | "warning" | "success" | "danger" = "info";
-          const rawLevel = (data.alertLevel || data.type || "info").toString().toLowerCase();
+          const rawLevel = String(data.alertLevel || data.type || "info").toLowerCase();
           if (rawLevel.includes("warn")) normType = "warning";
           else if (rawLevel.includes("succ") || rawLevel.includes("pay")) normType = "success";
           else if (rawLevel.includes("danger") || rawLevel.includes("urg") || rawLevel.includes("err")) normType = "danger";
@@ -210,6 +222,8 @@ export function subscribeToDriverNotifications(
         const timeB = new Date(b.createdAt || b.time).getTime() || 0;
         return timeB - timeA;
       });
+
+      console.log(`FOUND ${allNotifs.length} MATCHING NOTIFICATIONS FOR ETM:`, cleanEtm, allNotifs);
 
       if (onUpdate) {
         onUpdate(allNotifs);
@@ -262,3 +276,4 @@ export async function markNotificationAsRead(
     markNotificationReadInSheet(notificationId, accessToken).catch(() => {});
   }
 }
+
