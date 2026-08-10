@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { AdminScreen } from "../../types";
 import { DISPLAY_VERSION } from "../../lib/version";
+import SSKLogo from "../SSKLogo";
 
 interface AdminDrawerProps {
   isOpen: boolean;
@@ -127,9 +128,7 @@ export default function AdminDrawer({
         <div className="p-4 bg-[#0A3880] flex items-center justify-between border-b border-blue-800 shrink-0 h-16">
           {!isCollapsed ? (
             <div className="flex items-center gap-3 overflow-hidden">
-              <div className="w-9 h-9 rounded-full bg-blue-500/30 border border-blue-400/40 flex items-center justify-center font-bold text-white shrink-0">
-                <ShieldAlert className="w-5 h-5 text-amber-300" />
-              </div>
+              <SSKLogo className="w-9 h-9 shrink-0 drop-shadow-md" />
               <div className="min-w-0">
                 <h3 className="font-extrabold text-xs leading-tight text-white truncate">{adminName}</h3>
                 <p className="text-[10px] text-blue-200 font-medium truncate">{adminMobile}</p>
@@ -137,9 +136,7 @@ export default function AdminDrawer({
             </div>
           ) : (
             <div className="w-full flex justify-center">
-              <div className="w-9 h-9 rounded-full bg-blue-500/30 border border-blue-400/40 flex items-center justify-center font-bold text-white shrink-0">
-                <ShieldAlert className="w-5 h-5 text-amber-300" />
-              </div>
+              <SSKLogo className="w-9 h-9 shrink-0 drop-shadow-md" />
             </div>
           )}
           <button
@@ -231,9 +228,7 @@ export default function AdminDrawer({
               {/* Header */}
               <div className="p-4 bg-[#0A3880] flex items-center justify-between border-b border-blue-800">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-blue-500/30 border border-blue-400/40 flex items-center justify-center font-bold text-white text-base">
-                    <ShieldAlert className="w-5 h-5 text-amber-300" />
-                  </div>
+                  <SSKLogo className="w-10 h-10 shrink-0 drop-shadow-md" />
                   <div>
                     <h3 className="font-bold text-sm leading-tight text-white">{adminName}</h3>
                     <p className="text-[10px] text-blue-200 font-medium">{adminMobile}</p>
