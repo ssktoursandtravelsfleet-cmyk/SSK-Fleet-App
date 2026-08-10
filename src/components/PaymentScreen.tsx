@@ -1,7 +1,40 @@
 import React, { useState, useEffect } from "react";
-import { Wallet, Menu, Info, CreditCard, Clock, CheckCircle, AlertTriangle, Calendar, Loader2, X, QrCode, User } from "lucide-react";
+import { Wallet, Menu, Info, CreditCard, Clock, CheckCircle, AlertTriangle, Calendar, Loader2, X, QrCode, User, Copy, Check } from "lucide-react";
 import { PaymentRecord, DriverDetails } from "../types";
 import PullToRefresh from "./PullToRefresh";
+
+const RECEIVER_UPI_ID = "9702291761-2@ybl";
+
+export function formatAndValidateUpiAmount(input: string | number): {
+  isValid: boolean;
+  formattedAmount: string;
+  numericAmount: number;
+  error?: string;
+} {
+  if (input === null || input === undefined) {
+    return { isValid: false, formattedAmount: "", numericAmount: 0, error: "Payment amount is required." };
+  }
+
+  const cleaned = String(input).replace(/[₹,$\s]/g, "").trim();
+  const num = parseFloat(cleaned);
+
+  if (isNaN(num) || !isFinite(num)) {
+    return { isValid: false, formattedAmount: "", numericAmount: 0, error: "Please enter a valid numeric payment amount." };
+  }
+
+  if (num <= 0) {
+    return { isValid: false, formattedAmount: "", numericAmount: 0, error: "Payment amount must be greater than ₹0." };
+  }
+
+  const rounded = Math.round(num * 100) / 100;
+  const formattedAmount = rounded % 1 === 0 ? rounded.toString() : rounded.toFixed(2);
+
+  return {
+    isValid: true,
+    formattedAmount,
+    numericAmount: rounded,
+  };
+}
 
 interface PaymentScreenProps {
   payments: PaymentRecord[];
@@ -161,11 +194,34 @@ export default function PaymentScreen({
     }
   };
 
-  const handleSelectPaymentMethod = async (methodName: string) => {
-    const payAmount = parseFloat(enteredAmount) || Math.abs(amount) || 0;
+  const [copied, setCopied] = useState(false);
 
-    if (payAmount <= 0) {
-      triggerNotification("Invalid Amount ⚠️", "Please enter a valid payment amount.", "warning");
+  const handleCopyUpiId = async () => {
+    try {
+      await navigator.clipboard.writeText(RECEIVER_UPI_ID);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+      triggerNotification(
+        "UPI ID Copied 📋",
+        `UPI ID ${RECEIVER_UPI_ID} copied to clipboard. Paste it in your UPI app to pay.`,
+        "success"
+      );
+    } catch (e) {
+      triggerNotification(
+        "Copy UPI ID",
+        `Receiver UPI ID: ${RECEIVER_UPI_ID}`,
+        "info"
+      );
+    }
+  };
+
+  const handleSelectPaymentMethod = async (methodName: string) => {
+    const { isValid, formattedAmount, numericAmount, error } = formatAndValidateUpiAmount(
+      enteredAmount || Math.abs(amount) || 0
+    );
+
+    if (!isValid) {
+      triggerNotification("Invalid Amount ⚠️", error || "Please enter a valid payment amount.", "warning");
       return;
     }
 
@@ -174,22 +230,30 @@ export default function PaymentScreen({
       return;
     }
 
-    // Generate UPI payment link with pre-filled receiver details (UPI ID hidden from display)
-    const receiverUpi = "9702291761-2@ybl";
-    const receiverName = encodeURIComponent("SSK Fleet");
-    const note = encodeURIComponent("SSK Fleet Outstanding Payment");
-    const upiLink = `upi://pay?pa=${receiverUpi}&pn=${receiverName}&am=${payAmount}&tn=${note}&cu=INR`;
+    if (methodName === "Copy UPI ID") {
+      await handleCopyUpiId();
+      return;
+    }
+
+    // Exact standard UPI format requested: upi://pay?pa=9702291761-2@ybl&pn=SSK%20Fleet&am={AMOUNT}&cu=INR
+    const upiLink = `upi://pay?pa=${RECEIVER_UPI_ID}&pn=SSK%20Fleet&am=${formattedAmount}&cu=INR`;
 
     try {
-      window.open(upiLink, "_self");
       window.location.href = upiLink;
+      window.open(upiLink, "_self");
     } catch (e) {
       console.warn("UPI deep linking issue:", e);
     }
 
+    triggerNotification(
+      `Redirecting to ${methodName} 📲`,
+      `Opening UPI app for ₹${formattedAmount}. If app does not open, use Copy UPI ID or QR Code.`,
+      "info"
+    );
+
     // Record payment into Google Sheets
     setIsSubmitting(true);
-    const success = await onSubmitPayment(paymentType, payAmount);
+    const success = await onSubmitPayment(paymentType, numericAmount);
     setIsSubmitting(false);
 
     if (success) {
@@ -201,9 +265,17 @@ export default function PaymentScreen({
   };
 
   const handleConfirmQrPayment = async () => {
-    const payAmount = parseFloat(enteredAmount) || Math.abs(amount) || 0;
+    const { isValid, numericAmount, error } = formatAndValidateUpiAmount(
+      enteredAmount || Math.abs(amount) || 0
+    );
+
+    if (!isValid) {
+      triggerNotification("Invalid Amount ⚠️", error || "Please enter a valid payment amount.", "warning");
+      return;
+    }
+
     setIsSubmitting(true);
-    const success = await onSubmitPayment(paymentType, payAmount);
+    const success = await onSubmitPayment(paymentType, numericAmount);
     setIsSubmitting(false);
 
     if (success) {
@@ -222,8 +294,11 @@ export default function PaymentScreen({
     }
   };
 
+  const currentValidation = formatAndValidateUpiAmount(enteredAmount || Math.abs(amount) || 0);
+  const validAmountStr = currentValidation.isValid ? currentValidation.formattedAmount : "0";
+
   const upiQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
-    `upi://pay?pa=9702291761-2@ybl&pn=SSK Fleet&am=${parseFloat(enteredAmount) || Math.abs(amount) || 0}&tn=SSK Fleet Outstanding Payment&cu=INR`
+    `upi://pay?pa=${RECEIVER_UPI_ID}&pn=SSK%20Fleet&am=${validAmountStr}&cu=INR`
   )}`;
 
   return (
@@ -591,7 +666,31 @@ export default function PaymentScreen({
                 </div>
               </button>
 
-              {/* 6. QR Code */}
+              {/* 6. Copy UPI ID */}
+              <button
+                onClick={() => handleSelectPaymentMethod("Copy UPI ID")}
+                disabled={isSubmitting}
+                className="w-full flex items-center justify-between p-3.5 bg-white dark:bg-slate-800/90 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 rounded-[16px] shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group disabled:opacity-50"
+              >
+                <div className="flex items-center gap-3.5">
+                  <div className="w-11 h-11 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 shadow-2xs">
+                    {copied ? <Check className="w-5 h-5 text-emerald-600" /> : <Copy className="w-5 h-5" />}
+                  </div>
+                  <div className="flex flex-col text-left">
+                    <span className="text-xs sm:text-sm font-extrabold text-slate-800 dark:text-slate-100">
+                      {copied ? "UPI ID Copied!" : "Copy UPI ID"}
+                    </span>
+                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-medium font-mono">
+                      {RECEIVER_UPI_ID}
+                    </span>
+                  </div>
+                </div>
+                <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-700/60 group-hover:bg-[#0A2540] dark:group-hover:bg-blue-600 group-hover:text-white flex items-center justify-center transition-colors text-slate-400 dark:text-slate-300">
+                  <span className="text-xs font-bold">📋</span>
+                </div>
+              </button>
+
+              {/* 7. QR Code */}
               <button
                 onClick={() => handleSelectPaymentMethod("QR Code")}
                 disabled={isSubmitting}
@@ -646,20 +745,25 @@ export default function PaymentScreen({
               />
             </div>
 
-            <div className="bg-slate-50 dark:bg-slate-800 rounded-2xl p-3 w-full text-center flex flex-col gap-1 border border-slate-100 dark:border-slate-700">
+            <div className="bg-slate-50 dark:bg-slate-800 rounded-2xl p-3.5 w-full text-center flex flex-col gap-1.5 border border-slate-100 dark:border-slate-700">
               <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Payment For: {paymentType}</span>
-              <span className="text-xl font-black text-[#0A2540] dark:text-white">
-                ₹{(parseFloat(enteredAmount) || Math.abs(amount) || 0).toLocaleString("en-IN")}
+              <span className="text-2xl font-black text-[#0A2540] dark:text-white">
+                ₹{validAmountStr}
               </span>
-              <p className="text-[11px] text-slate-600 dark:text-slate-300 font-semibold mt-0.5">
-                Receiver: <strong className="text-[#0A2540] dark:text-white">SSK Fleet</strong>
-              </p>
-              <p className="text-[11px] text-slate-600 dark:text-slate-300 font-semibold">
-                UPI VPA: <strong className="text-emerald-600 dark:text-emerald-400 font-mono">9702291761-2@ybl</strong>
-              </p>
-              <p className="text-[9px] text-slate-400 font-medium">
-                Note: SSK Fleet Outstanding Payment
-              </p>
+              <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 dark:border-slate-700 text-xs">
+                <span className="text-slate-500 font-medium">Receiver:</span>
+                <strong className="text-[#0A2540] dark:text-white font-extrabold">SSK Fleet</strong>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-500 font-medium">UPI VPA:</span>
+                <button
+                  onClick={handleCopyUpiId}
+                  className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold font-mono hover:underline cursor-pointer"
+                >
+                  <span>{RECEIVER_UPI_ID}</span>
+                  <Copy className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
 
             <button
