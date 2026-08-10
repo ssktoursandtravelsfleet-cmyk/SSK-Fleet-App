@@ -439,7 +439,7 @@ export default function WeeklyHissabScreen({
                 className="w-full bg-[#0D47A1] hover:bg-[#1E88E5] text-white font-extrabold py-3 px-4 rounded-xl text-xs transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer mt-2"
                 id="btn-weekly-hissab-pay-now"
               >
-                <span>Pay Dues via UPI (9702291761-2@ybl)</span>
+                <span>Pay Dues via UPI (khedekarsatish28pari-1@oksbi)</span>
               </button>
             )}
           </div>

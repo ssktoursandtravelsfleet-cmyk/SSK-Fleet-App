@@ -3,7 +3,7 @@ import { Wallet, Menu, Info, CreditCard, Clock, CheckCircle, AlertTriangle, Cale
 import { PaymentRecord, DriverDetails } from "../types";
 import PullToRefresh from "./PullToRefresh";
 
-const RECEIVER_UPI_ID = "9702291761-2@ybl";
+const RECEIVER_UPI_ID = "khedekarsatish28pari-1@oksbi";
 
 export function formatAndValidateUpiAmount(input: string | number): {
   isValid: boolean;
@@ -235,7 +235,7 @@ export default function PaymentScreen({
       return;
     }
 
-    // Exact standard UPI format requested: upi://pay?pa=9702291761-2@ybl&pn=SSK%20Fleet&am={AMOUNT}&cu=INR
+    // Exact standard UPI format requested: upi://pay?pa=khedekarsatish28pari-1@oksbi&pn=SSK%20Fleet&am={AMOUNT}&cu=INR
     const upiLink = `upi://pay?pa=${RECEIVER_UPI_ID}&pn=SSK%20Fleet&am=${formattedAmount}&cu=INR`;
 
     try {
