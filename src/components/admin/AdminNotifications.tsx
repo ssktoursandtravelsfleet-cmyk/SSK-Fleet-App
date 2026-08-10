@@ -17,8 +17,10 @@ interface AdminNotificationsProps {
     title: string,
     message: string,
     type: "info" | "warning" | "success" | "danger",
-    targetDriver?: string
-  ) => Promise<void>;
+    targetDriverEtm?: string,
+    targetDriverName?: string,
+    channel?: string
+  ) => Promise<{ success: boolean; message: string } | void>;
   isProcessing?: boolean;
 }
 
@@ -42,9 +44,13 @@ export default function AdminNotifications({
     }
 
     try {
+      const selectedDriverObj = drivers.find((d) => (d.etmId || d.id || d.mobile) === targetDriver);
+      const targetEtm = targetDriver === "ALL" ? "ALL" : (selectedDriverObj?.etmId || selectedDriverObj?.id || selectedDriverObj?.mobile || targetDriver);
+      const targetName = targetDriver === "ALL" ? "All Fleet Drivers" : (selectedDriverObj?.name || "Fleet Driver");
+      const channelLabel = channel === "WHATSAPP" ? "WhatsApp Message" : channel === "IMPORTANT" ? "Important Notice" : "In-App Push Alert";
+
       if (channel === "WHATSAPP") {
-        // Open WhatsApp Web API link for selected driver or general WhatsApp broadcast
-        const cleanMobile = targetDriver !== "ALL" ? targetDriver.replace(/\D/g, "") : "";
+        const cleanMobile = selectedDriverObj?.mobile ? selectedDriverObj.mobile.replace(/\D/g, "") : (targetDriver !== "ALL" ? targetDriver.replace(/\D/g, "") : "");
         const encodedText = encodeURIComponent(`*${title}*\n\n${message}\n\n_SSK Driver Fleet Operations_`);
         const waUrl = cleanMobile
           ? `https://wa.me/91${cleanMobile}?text=${encodedText}`
@@ -52,9 +58,12 @@ export default function AdminNotifications({
         window.open(waUrl, "_blank");
       }
 
-      await onSendNotification(title, message, notifType, targetDriver);
-      setSuccessMsg(`Broadcast notification dispatched successfully via ${channel}!`);
-      setTimeout(() => setSuccessMsg(null), 4000);
+      const res = await onSendNotification(title, message, notifType, targetEtm, targetName, channelLabel);
+      const outputMsg = (res && typeof res === "object" && "message" in res && typeof res.message === "string")
+        ? res.message
+        : (targetEtm !== "ALL" ? `Notification sent successfully to ${targetName} (${targetEtm}).` : "Notification broadcasted successfully to All Fleet Drivers.");
+      setSuccessMsg(outputMsg);
+      setTimeout(() => setSuccessMsg(null), 5000);
       setTitle("");
       setMessage("");
     } catch (err: any) {

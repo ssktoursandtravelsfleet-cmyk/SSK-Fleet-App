@@ -117,16 +117,25 @@ export default function DashboardScreen({
     return s;
   };
 
-  const getNumericVal = (val: number | string | undefined): number => {
+  const parseRawVal = (val: number | string | undefined): number => {
     if (val === undefined || val === null) return 0;
-    if (typeof val === "number") return Math.abs(val);
-    const clean = String(val).replace(/[^0-9.-]/g, "");
+    if (typeof val === "number") return val;
+    const clean = String(val).replace(/[^0-9.-]/g, "").trim();
     const num = parseFloat(clean);
-    return isNaN(num) ? 0 : Math.abs(num);
+    return isNaN(num) ? 0 : num;
+  };
+
+  const isPayable = (val: number | string | undefined): boolean => {
+    return parseRawVal(val) < 0;
+  };
+
+  const getPayableAmt = (val: number | string | undefined): number => {
+    const raw = parseRawVal(val);
+    return raw < 0 ? Math.abs(raw) : 0;
   };
 
   const handlePayNow = (paymentType: string, val: number | string | undefined) => {
-    const amt = getNumericVal(val);
+    const amt = getPayableAmt(val);
     if (onNavigateToPayment) {
       onNavigateToPayment({ paymentType, amount: amt });
     } else {
@@ -294,7 +303,7 @@ export default function DashboardScreen({
                 <h3 className="text-base font-black text-slate-800 dark:text-white mt-0.5 truncate">₹{Math.abs(lastWeekOutstandingAmt).toLocaleString("en-IN")}</h3>
               )}
             </div>
-            {getNumericVal(lastWeekOutstandingAmt) > 0 && (
+            {isPayable(lastWeekOutstandingAmt) && (
               <button
                 onClick={() => handlePayNow("Last Week Outstanding", lastWeekOutstandingAmt)}
                 className="w-full bg-[#0D47A1] hover:bg-[#1E88E5] text-white text-[9px] font-bold py-1.5 rounded-lg transition-all mt-2 cursor-pointer"
@@ -323,7 +332,7 @@ export default function DashboardScreen({
                 <h3 className="text-base font-black text-slate-800 dark:text-white mt-0.5 truncate">₹{Math.abs(weeklyRentAmt).toLocaleString("en-IN")}</h3>
               )}
             </div>
-            {getNumericVal(weeklyRentAmt) > 0 ? (
+            {isPayable(weeklyRentAmt) ? (
               <button
                 onClick={() => handlePayNow("Weekly Rent", weeklyRentAmt)}
                 className="w-full bg-[#0D47A1] hover:bg-[#1E88E5] text-white text-[9px] font-bold py-1.5 rounded-lg transition-all mt-2 cursor-pointer"
@@ -356,7 +365,7 @@ export default function DashboardScreen({
                 <h3 className="text-base font-black text-slate-800 dark:text-white mt-0.5 truncate">₹{Math.abs(currentOutstandingAmt).toLocaleString("en-IN")}</h3>
               )}
             </div>
-            {getNumericVal(currentOutstandingAmt) > 0 && (
+            {isPayable(currentOutstandingAmt) && (
               <button
                 onClick={() => handlePayNow("Current Outstanding", currentOutstandingAmt)}
                 className="w-full bg-[#0D47A1] hover:bg-[#1E88E5] text-white text-[9px] font-bold py-1.5 rounded-lg transition-all mt-2 cursor-pointer"
@@ -378,7 +387,7 @@ export default function DashboardScreen({
               )}
             </div>
             <div className="flex items-center gap-2">
-              {getNumericVal(totalOutstandingAmt) > 0 && (
+              {isPayable(totalOutstandingAmt) && (
                 <button
                   onClick={() => handlePayNow("Total Outstanding", totalOutstandingAmt)}
                   className="bg-amber-400 hover:bg-amber-300 active:scale-95 text-slate-950 font-black text-xs px-3.5 py-1.5 rounded-xl transition-all shadow-md cursor-pointer flex items-center gap-1"
@@ -469,15 +478,28 @@ export default function DashboardScreen({
               <div className="bg-[#0D47A1] text-white p-4 flex justify-between items-center">
                 <div className="flex items-center gap-2">
                   <Bell className="w-4 h-4 text-[#1E88E5]" />
-                  <h3 className="text-xs font-extrabold uppercase tracking-wider">SSK Notification Core</h3>
+                  <div>
+                    <h3 className="text-xs font-extrabold uppercase tracking-wider">Driver Notifications</h3>
+                    <p className="text-[9px] text-blue-200 font-medium">SSK Fleet Official Alerts</p>
+                  </div>
                 </div>
-                <button
-                  onClick={() => setShowNotificationsPanel(false)}
-                  className="p-1 rounded-full hover:bg-white/10 text-white cursor-pointer"
-                  id="notif-close-btn"
-                >
-                  <X className="w-4.5 h-4.5" />
-                </button>
+                <div className="flex items-center gap-2">
+                  {unreadCount > 0 && (
+                    <button
+                      onClick={() => notifications.forEach((n) => onMarkNotificationRead(n.id))}
+                      className="text-[9px] font-bold bg-white/10 hover:bg-white/20 text-white px-2 py-1 rounded-lg border border-white/20 transition-all cursor-pointer"
+                    >
+                      Mark All Read
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setShowNotificationsPanel(false)}
+                    className="p-1 rounded-full hover:bg-white/10 text-white cursor-pointer"
+                    id="notif-close-btn"
+                  >
+                    <X className="w-4.5 h-4.5" />
+                  </button>
+                </div>
               </div>
 
               {/* Notif Center List */}
@@ -488,35 +510,79 @@ export default function DashboardScreen({
                     <p className="text-xs font-semibold">No active notices</p>
                   </div>
                 ) : (
-                  notifications.map((notif) => (
-                    <div
-                      key={notif.id}
-                      onClick={() => onMarkNotificationRead(notif.id)}
-                      className={`p-3 rounded-2xl border transition-all relative cursor-pointer ${
-                        notif.read
-                          ? "bg-slate-50/50 border-slate-100 text-slate-500"
-                          : "bg-blue-50/30 border-blue-100 text-slate-800 shadow-xs"
-                      }`}
-                    >
-                      {!notif.read && (
-                        <span className="absolute top-3.5 right-3.5 w-2 h-2 bg-[#1E88E5] rounded-full"></span>
-                      )}
-                      <div className="flex gap-2">
-                        <div className="flex-1">
-                          <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                            {notif.type === "warning" && <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
-                            {notif.title}
-                          </h4>
-                          <p className="text-[10px] text-slate-500 mt-1 leading-relaxed font-medium">
-                            {notif.message}
-                          </p>
-                          <span className="text-[8px] text-slate-400 mt-2 block font-bold uppercase tracking-wider">
-                            {notif.time}
+                  notifications.map((notif) => {
+                    const isUnread = !notif.read;
+                    return (
+                      <div
+                        key={notif.id}
+                        onClick={() => onMarkNotificationRead(notif.id)}
+                        className={`p-3.5 rounded-2xl border transition-all relative cursor-pointer ${
+                          isUnread
+                            ? "bg-blue-50/60 border-blue-200 text-slate-800 shadow-xs ring-1 ring-blue-100"
+                            : "bg-slate-50/50 border-slate-100 text-slate-500"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2 mb-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {/* Alert Level Pill */}
+                            <span
+                              className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-md ${
+                                notif.type === "warning"
+                                  ? "bg-amber-100 text-amber-800"
+                                  : notif.type === "danger"
+                                  ? "bg-rose-100 text-rose-800"
+                                  : notif.type === "success"
+                                  ? "bg-emerald-100 text-emerald-800"
+                                  : "bg-blue-100 text-blue-800"
+                              }`}
+                            >
+                              {notif.type === "warning"
+                                ? "Warning"
+                                : notif.type === "danger"
+                                ? "Urgent"
+                                : notif.type === "success"
+                                ? "Success"
+                                : "Notice"}
+                            </span>
+
+                            {/* Channel Pill if present */}
+                            {notif.channel && (
+                              <span className="text-[9px] font-bold bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded-md">
+                                {notif.channel}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Read / Unread Badge */}
+                          <span
+                            className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full ${
+                              isUnread
+                                ? "bg-red-500 text-white animate-pulse"
+                                : "bg-slate-200 text-slate-500"
+                            }`}
+                          >
+                            {isUnread ? "Unread" : "Read"}
                           </span>
                         </div>
+
+                        {/* Title & Message */}
+                        <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5 mt-1">
+                          {notif.type === "warning" && <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
+                          {notif.type === "danger" && <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0" />}
+                          {notif.title}
+                        </h4>
+                        <p className="text-[11px] text-slate-600 mt-1 leading-relaxed font-medium">
+                          {notif.message}
+                        </p>
+
+                        {/* Timestamp & Sender */}
+                        <div className="flex items-center justify-between text-[9px] text-slate-400 mt-2.5 font-bold pt-2 border-t border-slate-100">
+                          <span>{notif.time || notif.createdAt}</span>
+                          {notif.createdBy && <span>By: {notif.createdBy}</span>}
+                        </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </motion.div>

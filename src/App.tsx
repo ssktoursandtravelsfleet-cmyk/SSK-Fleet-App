@@ -29,7 +29,7 @@ import SSKLogo from "./components/SSKLogo";
 import { ActiveScreen, NotificationItem, VehicleDocument, TransactionItem, DriverDetails, PaymentRecord, DriverDocumentRecord } from "./types";
 import { mockDriver, mockDocuments, mockNotifications, mockTransactions } from "./data";
 import { initAuth, googleSignIn, logoutUser } from "./firebase";
-import { fetchAndParseAllSheets, getCachedSheetsData, appendOnboardingDocuments, uploadBase64Image, appendDriverOnboardingData, checkMobileInDriverSheet, writePaymentLog, SPREADSHEET_ID, authenticateDriverWithSheet, updateLastLogin, updateDriverProfileInSheets, saveDriverDocumentsToSheet, fetchDriverDocumentsFromSheet, resolveDriverDisplayName } from "./lib/sheets";
+import { fetchAndParseAllSheets, getCachedSheetsData, appendOnboardingDocuments, uploadBase64Image, appendDriverOnboardingData, checkMobileInDriverSheet, writePaymentLog, SPREADSHEET_ID, authenticateDriverWithSheet, updateLastLogin, updateDriverProfileInSheets, saveDriverDocumentsToSheet, fetchDriverDocumentsFromSheet, resolveDriverDisplayName, markNotificationReadInSheet } from "./lib/sheets";
 import { DISPLAY_VERSION } from "./lib/version";
 
 export default function App() {
@@ -373,7 +373,7 @@ export default function App() {
     const interval = setInterval(async () => {
       setSyncState("syncing");
       try {
-        const result = await fetchAndParseAllSheets(accessToken, phoneNumber || driver?.phone, driver?.id);
+        const result = await fetchAndParseAllSheets(accessToken, phoneNumber || driver?.phone, driver?.etm || (driver as any)?.ETM || driver?.id);
         if (result.driver) {
           setDriver(result.driver);
         }
@@ -496,7 +496,7 @@ export default function App() {
           .catch((docErr) => console.error("Failed to fetch driver document record after login:", docErr));
 
         // 4. Load all driver-specific sheets (earnings, payments, documents, etc.)
-        const syncResult = await fetchAndParseAllSheets(accessToken, mobile, driverData.Driver_ID);
+        const syncResult = await fetchAndParseAllSheets(accessToken, mobile, driverData.ETM || driverData.Driver_ID);
         if (syncResult.driver) {
           setDriver((prev) => {
             const finalName = resolveDriverDisplayName(syncResult.driver, mobile, driverData.ETM || syncResult.driver?.etm);
@@ -619,8 +619,13 @@ export default function App() {
 
   const handleMarkNotificationRead = (id: string) => {
     setNotifications((prev) =>
-      prev.map((notif) => (notif.id === id ? { ...notif, read: true } : notif))
+      prev.map((notif) => (notif.id === id ? { ...notif, read: true, readAt: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) } : notif))
     );
+    if (accessToken) {
+      markNotificationReadInSheet(id, accessToken).catch((err) =>
+        console.error("Failed to mark notification as read in Google Sheet:", err)
+      );
+    }
   };
 
   const handleRenewDocument = (docId: string) => {
@@ -965,7 +970,7 @@ export default function App() {
   const handleRefreshDatabase = async () => {
     setSyncState("syncing");
     try {
-      const result = await fetchAndParseAllSheets(accessToken, phoneNumber || driver?.phone, driver?.id);
+      const result = await fetchAndParseAllSheets(accessToken, phoneNumber || driver?.phone, driver?.etm || (driver as any)?.ETM || driver?.id);
       
       // Handle the "No data found" case if ALL sheets are completely empty
       if (!result.driver && result.transactions.length === 0 && result.documents.length === 0 && result.notifications.length === 0 && (!result.payments || result.payments.length === 0)) {

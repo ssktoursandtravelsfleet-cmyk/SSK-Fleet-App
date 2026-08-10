@@ -854,38 +854,8 @@ export async function fetchAndParseAllSheets(
       }
     }
 
-    // Filter notifications by Driver ID or mobile number
-    let filteredNotifications = parseSheetRows<NotificationItem>(notificationsRaw, notificationMappings);
-    if (matchedDriver) {
-      const notifHeaders = notificationsRaw && notificationsRaw.length > 0 ? notificationsRaw[0].map(h => normalizeHeader(h)) : [];
-      if (notifHeaders.length > 0) {
-        const notifDriverIdIndex = notifHeaders.findIndex(h => ["driverid", "driver_id", "id", "uid"].includes(h));
-        const notifMobileIndex = notifHeaders.findIndex(h => ["mobile", "mobilenumber", "phone", "phonenumber"].includes(h));
-        
-        filteredNotifications = filteredNotifications.filter((notif, rowIndex) => {
-          const row = notificationsRaw[rowIndex + 1];
-          if (!row) return true;
-
-          let hasFilter = false;
-          let isMatch = true;
-
-          if (notifDriverIdIndex !== -1 && loggedDriverId) {
-            hasFilter = true;
-            const rowDriverId = (row[notifDriverIdIndex] || "").trim();
-            isMatch = rowDriverId === loggedDriverId.trim();
-          }
-
-          if (!isMatch && notifMobileIndex !== -1 && matchedDriver.phone) {
-            hasFilter = true;
-            const rowMobile = (row[notifMobileIndex] || "").trim().replace(/\D/g, "").slice(-10);
-            const loggedNorm = matchedDriver.phone.replace(/\D/g, "").slice(-10);
-            isMatch = rowMobile === loggedNorm;
-          }
-
-          return hasFilter ? isMatch : true;
-        });
-      }
-    }
+    // Filter notifications specifically by Driver ETM / ID or mobile number
+    const filteredNotifications = parseNotificationRows(notificationsRaw, loggedMobile, matchedDriver, loggedDriverId);
 
     const payments = parsePaymentRows(paymentsRaw, loggedMobile, loggedDriverId);
 
@@ -4098,37 +4068,263 @@ export async function updateDriverStatusInSheet(
 }
 
 /**
- * Send Admin Notification to Notifications Sheet
+ * Parses raw Notifications sheet rows, filtering specifically for the target driver
+ */
+export function parseNotificationRows(
+  rows: string[][],
+  loggedMobile?: string,
+  matchedDriver?: DriverDetails | null,
+  loggedDriverId?: string
+): NotificationItem[] {
+  if (!rows || rows.length <= 1) return [];
+
+  const headers = rows[0].map(h => normalizeHeader(h));
+  const dataRows = rows.slice(1);
+
+  // Column header indices
+  const idCol = headers.findIndex(h => ["notificationid", "id", "notifid"].includes(h));
+  const etmCol = headers.findIndex(h => ["etmid", "driverid", "driver_id", "target", "uid", "driver"].includes(h));
+  const nameCol = headers.findIndex(h => ["drivername", "name"].includes(h));
+  const titleCol = headers.findIndex(h => ["title", "header", "subject", "noticeheader"].includes(h));
+  const msgCol = headers.findIndex(h => ["message", "body", "text", "detailedmessage", "content"].includes(h));
+  const typeCol = headers.findIndex(h => ["alertlevel", "type", "severity", "category", "alerttype"].includes(h));
+  const channelCol = headers.findIndex(h => ["channel", "notificationchannel"].includes(h));
+  const createdCol = headers.findIndex(h => ["createdat", "createddate", "time", "date", "timestamp"].includes(h));
+  const byCol = headers.findIndex(h => ["createdby", "admin"].includes(h));
+  const readCol = headers.findIndex(h => ["readstatus", "read", "status", "isread"].includes(h));
+  const readAtCol = headers.findIndex(h => ["readat", "readdatetime"].includes(h));
+
+  // Determine logged-in driver's identifiers:
+  const driverEtm = (matchedDriver?.etm || (matchedDriver as any)?.ETM || loggedDriverId || "").trim().toUpperCase();
+  const driverMobile = (matchedDriver?.phone || loggedMobile || "").trim().replace(/\D/g, "").slice(-10);
+  const driverIdStr = (matchedDriver?.id || loggedDriverId || "").trim().toUpperCase();
+
+  const results: NotificationItem[] = [];
+
+  dataRows.forEach((row, rowIndex) => {
+    if (!row || row.length === 0 || row.every(cell => !cell || !cell.trim())) return;
+
+    // Default column mapping if headers were standard 11-column order:
+    // Col 0: ID, Col 1: ETM ID, Col 2: Driver Name, Col 3: Title, Col 4: Message, Col 5: Alert Level, Col 6: Channel, Col 7: Created At, Col 8: Created By, Col 9: Read Status, Col 10: Read At
+    let notifId = (idCol !== -1 && row[idCol]) ? row[idCol].trim() : (row[0] || `NOTIF_${rowIndex + 1}`);
+    let targetEtm = (etmCol !== -1 && row[etmCol]) ? row[etmCol].trim() : (row[1] || "ALL").trim();
+    let targetName = (nameCol !== -1 && row[nameCol]) ? row[nameCol].trim() : (row[2] || "");
+    let title = (titleCol !== -1 && row[titleCol]) ? row[titleCol].trim() : (row[3] || row[2] || "Notification");
+    let message = (msgCol !== -1 && row[msgCol]) ? row[msgCol].trim() : (row[4] || row[3] || "");
+    let typeVal = (typeCol !== -1 && row[typeCol]) ? row[typeCol].trim().toLowerCase() : (row[5] || row[4] || "info").toLowerCase();
+    let channelVal = (channelCol !== -1 && row[channelCol]) ? row[channelCol].trim() : (row[6] || "In-App Push Alert");
+    let createdAtVal = (createdCol !== -1 && row[createdCol]) ? row[createdCol].trim() : (row[7] || row[0] || new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }));
+    let createdByVal = (byCol !== -1 && row[byCol]) ? row[byCol].trim() : (row[8] || "Admin Manager");
+    let readStatusVal = (readCol !== -1 && row[readCol]) ? row[readCol].trim() : (row[9] || row[5] || "Unread");
+    let readAtVal = (readAtCol !== -1 && row[readAtCol]) ? row[readAtCol].trim() : (row[10] || "");
+
+    // Handle legacy 6-column format if headers were absent
+    if (headers.length < 8 && row.length <= 6) {
+      createdAtVal = row[0] || createdAtVal;
+      targetEtm = row[1] || targetEtm;
+      title = row[2] || title;
+      message = row[3] || message;
+      typeVal = (row[4] || typeVal).toLowerCase();
+      readStatusVal = row[5] || readStatusVal;
+    }
+
+    // Target filtering check
+    const upperTarget = targetEtm.toUpperCase();
+
+    let isMatch = false;
+
+    // 1. Broadcast to ALL / BROADCAST / EVERYONE
+    if (!upperTarget || upperTarget === "ALL" || upperTarget === "BROADCAST" || upperTarget === "EVERYONE") {
+      isMatch = true;
+    }
+    // 2. Target matches driver's ETM ID
+    else if (driverEtm && upperTarget === driverEtm) {
+      isMatch = true;
+    }
+    // 3. Target matches driver's ID
+    else if (driverIdStr && upperTarget === driverIdStr) {
+      isMatch = true;
+    }
+    // 4. Target matches driver's mobile number
+    else if (driverMobile) {
+      const cleanTargetDigits = targetEtm.replace(/\D/g, "").slice(-10);
+      if (cleanTargetDigits && cleanTargetDigits === driverMobile) {
+        isMatch = true;
+      }
+    }
+
+    // If driver is NOT matched, EXCLUDE this notification
+    if (!isMatch) return;
+
+    // Normalize alert type
+    let normType: "info" | "warning" | "success" | "danger" = "info";
+    if (typeVal.includes("warn")) normType = "warning";
+    else if (typeVal.includes("succ") || typeVal.includes("pay")) normType = "success";
+    else if (typeVal.includes("danger") || typeVal.includes("urg") || typeVal.includes("err")) normType = "danger";
+
+    // Normalize read status
+    const lowerRead = readStatusVal.toLowerCase();
+    const isRead = lowerRead === "read" || lowerRead === "true" || lowerRead === "1" || lowerRead === "yes";
+
+    results.push({
+      id: notifId,
+      title,
+      message,
+      time: createdAtVal,
+      type: normType,
+      read: isRead,
+      etmId: targetEtm,
+      driverName: targetName,
+      channel: channelVal,
+      createdAt: createdAtVal,
+      createdBy: createdByVal,
+      readAt: readAtVal
+    });
+  });
+
+  return results;
+}
+
+/**
+ * Send Admin Notification to Notifications Sheet with driver-specific targeting
  */
 export async function sendAdminNotificationToSheet(
   title: string,
   message: string,
   type: "info" | "warning" | "success" | "danger",
-  driverMobileOrEtm?: string,
+  targetDriverEtm: string = "ALL",
+  targetDriverName: string = "All Fleet Drivers",
+  channel: string = "In-App Push Alert",
+  createdBy: string = "Admin Manager",
   accessToken?: string | null
 ): Promise<{ success: boolean; message: string }> {
   try {
     validateConfig(SPREADSHEET_ID);
     const sheetName = "Notifications";
+    const effectiveToken = getEffectiveToken(accessToken);
     const nowStr = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+    const notifId = `NOTIF_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
+
+    const headerRow = [
+      "Notification ID",
+      "ETM ID",
+      "Driver Name",
+      "Title",
+      "Message",
+      "Alert Level",
+      "Channel",
+      "Created At",
+      "Created By",
+      "Read Status",
+      "Read At"
+    ];
+
+    const cleanEtm = (targetDriverEtm || "ALL").trim();
+    const cleanName = (targetDriverName || "All Fleet Drivers").trim();
 
     const rowValues = [
-      nowStr,
-      driverMobileOrEtm || "ALL",
+      notifId,
+      cleanEtm,
+      cleanName,
       title,
       message,
       type || "info",
-      "FALSE"
+      channel || "In-App Push Alert",
+      nowStr,
+      createdBy || "Admin Manager",
+      "Unread",
+      ""
     ];
 
-    if (accessToken) {
-      await appendSheetRows(SPREADSHEET_ID, sheetName, [rowValues], accessToken);
+    if (effectiveToken) {
+      // Fetch existing rows to check if header exists
+      const existingRows = await fetchSheetValues(SPREADSHEET_ID, sheetName, effectiveToken).catch(() => [] as string[][]);
+      if (!existingRows || existingRows.length === 0) {
+        await appendSheetRows(SPREADSHEET_ID, sheetName, [headerRow], effectiveToken);
+      }
+      await appendSheetRows(SPREADSHEET_ID, sheetName, [rowValues], effectiveToken);
     }
 
-    return { success: true, message: "Notification broadcasted successfully!" };
+    const targetLabel = cleanEtm !== "ALL" && cleanEtm !== ""
+      ? `${cleanName} (${cleanEtm})`
+      : "All Fleet Drivers";
+
+    return {
+      success: true,
+      message: `Notification sent successfully to ${targetLabel}.`
+    };
   } catch (err: any) {
     console.error("Error sending admin notification:", err);
     return { success: false, message: err?.message || "Failed to send notification." };
+  }
+}
+
+/**
+ * Marks a notification as read in Google Sheets
+ */
+export async function markNotificationReadInSheet(
+  notificationId: string,
+  accessToken?: string | null
+): Promise<{ success: boolean; message: string }> {
+  try {
+    if (!notificationId) return { success: false, message: "Missing notification ID" };
+    const effectiveToken = getEffectiveToken(accessToken);
+    if (!effectiveToken) return { success: false, message: "Missing Google access token" };
+
+    const sheetName = "Notifications";
+    const rows = await fetchSheetValues(SPREADSHEET_ID, sheetName, effectiveToken).catch(() => [] as string[][]);
+    if (!rows || rows.length <= 1) return { success: false, message: "No notifications found" };
+
+    const headers = rows[0].map(h => normalizeHeader(h));
+    const idCol = headers.findIndex(h => ["notificationid", "id", "notifid"].includes(h));
+    const readCol = headers.findIndex(h => ["readstatus", "read", "status", "isread"].includes(h));
+    const readAtCol = headers.findIndex(h => ["readat", "readdatetime"].includes(h));
+
+    const targetIdColIndex = idCol !== -1 ? idCol : 0;
+    const targetReadColIndex = readCol !== -1 ? readCol : 9;
+    const targetReadAtColIndex = readAtCol !== -1 ? readAtCol : 10;
+
+    let targetRowIdx = -1;
+    for (let i = 1; i < rows.length; i++) {
+      const rowId = (rows[i][targetIdColIndex] || "").trim();
+      if (rowId === notificationId || `NOTIF_${i}` === notificationId || `row-${i}` === notificationId) {
+        targetRowIdx = i;
+        break;
+      }
+    }
+
+    if (targetRowIdx === -1) {
+      return { success: false, message: "Notification row not found in Google Sheets" };
+    }
+
+    const rowNumber = targetRowIdx + 1; // 1-based index in Sheet
+    const nowStr = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+
+    // Helper to get column letter (0 -> A, 9 -> J, 10 -> K)
+    const getColLetter = (colIdx: number): string => String.fromCharCode(65 + colIdx);
+
+    const readCellRange = `Notifications!${getColLetter(targetReadColIndex)}${rowNumber}`;
+    const urlRead = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(readCellRange)}?valueInputOption=USER_ENTERED`;
+
+    await fetch(urlRead, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${effectiveToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ values: [["Read"]] })
+    });
+
+    const readAtCellRange = `Notifications!${getColLetter(targetReadAtColIndex)}${rowNumber}`;
+    const urlReadAt = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(readAtCellRange)}?valueInputOption=USER_ENTERED`;
+
+    await fetch(urlReadAt, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${effectiveToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ values: [[nowStr]] })
+    });
+
+    return { success: true, message: "Notification marked as read in Google Sheets" };
+  } catch (err: any) {
+    console.error("Error marking notification read in sheet:", err);
+    return { success: false, message: err?.message || "Failed to mark read" };
   }
 }
 

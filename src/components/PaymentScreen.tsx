@@ -5,6 +5,14 @@ import PullToRefresh from "./PullToRefresh";
 
 const RECEIVER_UPI_ID = "khedekarsatish28pari-1@oksbi";
 
+export function parseRawAmount(input: string | number | undefined | null): number {
+  if (input === null || input === undefined) return 0;
+  if (typeof input === "number") return input;
+  const cleaned = String(input).replace(/[^0-9.-]/g, "").trim();
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? 0 : num;
+}
+
 export function formatAndValidateUpiAmount(input: string | number): {
   isValid: boolean;
   formattedAmount: string;
@@ -15,7 +23,7 @@ export function formatAndValidateUpiAmount(input: string | number): {
     return { isValid: false, formattedAmount: "", numericAmount: 0, error: "Payment amount is required." };
   }
 
-  const cleaned = String(input).replace(/[₹,$\s]/g, "").trim();
+  const cleaned = String(input).replace(/[^0-9.-]/g, "").trim();
   const num = parseFloat(cleaned);
 
   if (isNaN(num) || !isFinite(num)) {
@@ -66,11 +74,10 @@ export default function PaymentScreen({
   initialPaymentData,
   onClearInitialPaymentData,
 }: PaymentScreenProps) {
-  // Convert amount into numeric value:
-  const amount = Number(
-    String(outstandingAmount !== undefined ? outstandingAmount : 0)
-      .replace(/[₹,\s]/g, "")
-  );
+  // Convert amount into numeric value preserving sign:
+  const rawAmount = parseRawAmount(outstandingAmount);
+  const isPayable = rawAmount < 0; // Pay Now is enabled ONLY when raw outstanding is negative (< 0)
+  const payableAmount = isPayable ? Math.abs(rawAmount) : 0;
 
   const driverName = driver?.name || driver?.Driver_Name || driver?.Name || "Fleet Driver";
   const driverEtm = driver?.etm || (driver as any)?.etmId || (driver as any)?.ETM || "N/A";
@@ -85,18 +92,18 @@ export default function PaymentScreen({
   let bannerBorderClass = "";
   let bannerIconColorClass = "";
 
-  if (amount < 0) {
+  if (isPayable) {
     bannerTitle = "OUTSTANDING DUES AVAILABLE";
-    bannerMessage = "Pending payment amount: ₹" + Math.abs(amount).toLocaleString("en-IN");
+    bannerMessage = "Pending payment amount: ₹" + payableAmount.toLocaleString("en-IN");
     statusLabel = "Pending";
     statusColorClass = "text-rose-600 bg-rose-50 border-rose-200";
     bannerBgClass = "bg-rose-50";
     bannerTextClass = "text-rose-900/80";
     bannerBorderClass = "border-rose-100";
     bannerIconColorClass = "text-rose-600";
-  } else if (amount > 0) {
+  } else if (rawAmount > 0) {
     bannerTitle = "ACCOUNT IN CREDIT";
-    bannerMessage = "Available balance: ₹" + amount.toLocaleString("en-IN");
+    bannerMessage = "Available balance: ₹" + rawAmount.toLocaleString("en-IN");
     statusLabel = "Paid";
     statusColorClass = "text-emerald-600 bg-emerald-50 border-emerald-200";
     bannerBgClass = "bg-emerald-50";
@@ -156,23 +163,32 @@ export default function PaymentScreen({
       }
       if (initialPaymentData.amount !== undefined && initialPaymentData.amount > 0) {
         setEnteredAmount(String(initialPaymentData.amount));
-      } else {
-        setEnteredAmount(String(Math.abs(amount) || 0));
+        setModalOpen(true);
+      } else if (isPayable) {
+        setEnteredAmount(String(payableAmount || 0));
+        setModalOpen(true);
       }
-      setModalOpen(true);
     } else {
-      setEnteredAmount(String(Math.abs(amount) || 0));
+      setEnteredAmount(String(payableAmount || 0));
     }
   }, [initialPaymentData, outstandingAmount]);
 
   const handlePayRent = () => {
+    if (!isPayable) {
+      triggerNotification(
+        "No Pending Rent 🌿",
+        "Your account balance has no pending rent dues.",
+        "info"
+      );
+      return;
+    }
     setPaymentType("Weekly Rent");
-    setEnteredAmount(String(Math.abs(amount) || 0));
+    setEnteredAmount(String(payableAmount || 0));
     setModalOpen(true);
   };
 
   const handlePayDues = () => {
-    if (amount >= 0 && !initialPaymentData) {
+    if (!isPayable && !initialPaymentData) {
       triggerNotification(
         "No Outstanding Dues 🌿",
         "Your account is completely up to date. No payment is required.",
@@ -181,7 +197,7 @@ export default function PaymentScreen({
       return;
     }
     setPaymentType("Current Outstanding");
-    setEnteredAmount(String(Math.abs(amount) || 0));
+    setEnteredAmount(String(payableAmount || 0));
     setModalOpen(true);
   };
 
@@ -224,7 +240,7 @@ export default function PaymentScreen({
 
   const handlePayByAnyUpiApp = async () => {
     const { isValid, formattedAmount, numericAmount, error } = formatAndValidateUpiAmount(
-      enteredAmount || Math.abs(amount) || 0
+      enteredAmount || payableAmount || 0
     );
 
     if (!isValid) {
@@ -290,7 +306,7 @@ export default function PaymentScreen({
 
   const handleConfirmQrPayment = async () => {
     const { isValid, numericAmount, error } = formatAndValidateUpiAmount(
-      enteredAmount || Math.abs(amount) || 0
+      enteredAmount || payableAmount || 0
     );
 
     if (!isValid) {
@@ -318,7 +334,7 @@ export default function PaymentScreen({
     }
   };
 
-  const currentValidation = formatAndValidateUpiAmount(enteredAmount || Math.abs(amount) || 0);
+  const currentValidation = formatAndValidateUpiAmount(enteredAmount || payableAmount || 0);
   const validAmountStr = currentValidation.isValid ? currentValidation.formattedAmount : "0";
 
   const upiQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
@@ -375,14 +391,22 @@ export default function PaymentScreen({
 
             {/* Metrics Grid */}
             <div className="grid grid-cols-1 gap-3 mb-5">
-              {/* Total Outstanding */}
+              {/* Total Outstanding Display */}
               <div className="bg-[#FAFBFD] dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/80 rounded-2xl p-4 flex flex-col items-center text-center">
                 <span className="text-[10px] font-black tracking-widest text-slate-400 uppercase mb-1">
                   TOTAL OUTSTANDING AMOUNT
                 </span>
                 <span className="text-3xl font-black text-[#0A2540] dark:text-white">
-                  ₹{Math.abs(amount).toLocaleString("en-IN")}
+                  {rawAmount < 0
+                    ? `-₹${payableAmount.toLocaleString("en-IN")}`
+                    : `₹${rawAmount.toLocaleString("en-IN")}`
+                  }
                 </span>
+                {isPayable && (
+                  <span className="text-xs font-extrabold text-rose-600 dark:text-rose-400 mt-1">
+                    Amount to Pay: ₹{payableAmount.toLocaleString("en-IN")}
+                  </span>
+                )}
               </div>
 
               {/* Grid for Last Paid & Status */}
@@ -407,26 +431,29 @@ export default function PaymentScreen({
               </div>
             </div>
 
-            {/* Action Buttons */}
+            {/* Action Buttons: SHOW Pay Now ONLY WHEN rawAmount < 0 */}
             <div className="flex flex-col gap-2.5">
-              <div className="grid grid-cols-2 gap-2.5">
-                <button
-                  onClick={handlePayRent}
-                  className="bg-[#0A2540] hover:bg-[#123456] active:scale-98 text-white font-extrabold py-3.5 px-4 rounded-2xl text-xs transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer"
-                  id="btn-pay-rent"
-                >
-                  <CreditCard className="w-4 h-4" />
-                  <span>Pay Rent</span>
-                </button>
+              {isPayable ? (
                 <button
                   onClick={handlePayDues}
-                  className="bg-white hover:bg-slate-50 border border-slate-200 active:scale-98 text-[#0A2540] font-extrabold py-3.5 px-4 rounded-2xl text-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  id="btn-pay-dues"
+                  className="bg-[#0A2540] hover:bg-[#123456] active:scale-98 text-white font-extrabold py-3.5 px-4 rounded-2xl text-xs transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer w-full"
+                  id="btn-pay-now-dues"
                 >
-                  <Wallet className="w-4 h-4" />
-                  <span>Pay Dues</span>
+                  <CreditCard className="w-4.5 h-4.5 text-emerald-400" />
+                  <span>Pay Now (Amount to Pay: ₹{payableAmount.toLocaleString("en-IN")})</span>
                 </button>
-              </div>
+              ) : (
+                <div className="bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/50 rounded-2xl p-3.5 text-center flex flex-col items-center justify-center gap-1 shadow-2xs">
+                  <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300 font-extrabold text-xs">
+                    <CheckCircle className="w-4 h-4 text-emerald-600" />
+                    <span>No Outstanding Dues</span>
+                  </div>
+                  <p className="text-[11px] text-emerald-600/90 dark:text-emerald-400 font-medium">
+                    Your account balance has no pending dues. Pay Now button is disabled.
+                  </p>
+                </div>
+              )}
+
               <button
                 onClick={handleShowHistory}
                 className="bg-slate-50 hover:bg-slate-100 border border-slate-100 active:scale-98 text-slate-600 font-extrabold py-3 px-4 rounded-2xl text-xs transition-all flex items-center justify-center gap-2 cursor-pointer"

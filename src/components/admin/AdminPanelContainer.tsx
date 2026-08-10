@@ -252,9 +252,24 @@ export default function AdminPanelContainer({
     title: string,
     message: string,
     type: "info" | "warning" | "success" | "danger",
-    targetDriver?: string
+    targetDriverEtm?: string,
+    targetDriverName?: string,
+    channel?: string
   ) => {
-    await sendAdminNotificationToSheet(title, message, type, targetDriver, accessToken);
+    const res = await sendAdminNotificationToSheet(
+      title,
+      message,
+      type,
+      targetDriverEtm,
+      targetDriverName,
+      channel,
+      currentAdminDriver?.name || "Admin Manager",
+      accessToken
+    );
+    if (!res.success) {
+      throw new Error(res.message);
+    }
+    return res;
   };
 
   const pendingDriversCount = drivers.filter(d => getVerificationStatus(d) === "Pending").length;

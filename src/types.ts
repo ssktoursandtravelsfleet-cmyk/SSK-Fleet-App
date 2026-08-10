@@ -125,6 +125,12 @@ export interface NotificationItem {
   time: string;
   type: "info" | "warning" | "success" | "danger";
   read: boolean;
+  etmId?: string;
+  driverName?: string;
+  channel?: string;
+  createdAt?: string;
+  createdBy?: string;
+  readAt?: string;
 }
 
 export interface TransactionItem {
