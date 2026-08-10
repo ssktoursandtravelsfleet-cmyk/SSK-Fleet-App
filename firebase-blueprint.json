@@ -1,0 +1,32 @@
+{
+  "entities": {
+    "DriverNotification": {
+      "title": "Driver Notification",
+      "description": "In-app broadcast and targeted driver notifications",
+      "type": "object",
+      "properties": {
+        "recipientType": { "type": "string" },
+        "recipientId": { "type": "string" },
+        "driverId": { "type": "string" },
+        "driverName": { "type": "string" },
+        "mobileNumber": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "alertLevel": { "type": "string" },
+        "channel": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "read": { "type": "boolean" },
+        "readAt": { "type": "string" },
+        "status": { "type": "string" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["recipientId", "title", "message"]
+    }
+  },
+  "firestore": {
+    "/driver_notifications/{notificationId}": {
+      "schema": "DriverNotification",
+      "description": "Collection of driver notifications"
+    }
+  }
+}

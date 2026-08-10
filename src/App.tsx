@@ -30,6 +30,7 @@ import { ActiveScreen, NotificationItem, VehicleDocument, TransactionItem, Drive
 import { mockDriver, mockDocuments, mockNotifications, mockTransactions } from "./data";
 import { initAuth, googleSignIn, logoutUser } from "./firebase";
 import { fetchAndParseAllSheets, getCachedSheetsData, appendOnboardingDocuments, uploadBase64Image, appendDriverOnboardingData, checkMobileInDriverSheet, writePaymentLog, SPREADSHEET_ID, authenticateDriverWithSheet, updateLastLogin, updateDriverProfileInSheets, saveDriverDocumentsToSheet, fetchDriverDocumentsFromSheet, resolveDriverDisplayName, markNotificationReadInSheet } from "./lib/sheets";
+import { subscribeToDriverNotifications, markNotificationAsRead } from "./lib/notificationService";
 import { DISPLAY_VERSION } from "./lib/version";
 
 export default function App() {
@@ -366,6 +367,37 @@ export default function App() {
     }
   }, [isSplashFinished, pendingRedirect]);
 
+  // Real-time Firestore notification listener for the logged-in driver
+  useEffect(() => {
+    const driverEtm = driver?.etm || (driver as any)?.ETM || driver?.id || "";
+    const driverPhone = phoneNumber || driver?.phone || "";
+    const driverIdStr = driver?.id || "";
+
+    const unsubscribe = subscribeToDriverNotifications(
+      driverEtm,
+      driverPhone,
+      driverIdStr,
+      (realtimeNotifs) => {
+        if (realtimeNotifs && realtimeNotifs.length >= 0) {
+          setNotifications((prev) => {
+            // Keep any existing items if real-time snapshot is active or update directly
+            if (realtimeNotifs.length === 0 && prev.length > 0) {
+              return prev;
+            }
+            return realtimeNotifs;
+          });
+        }
+      },
+      (err) => {
+        console.warn("Realtime Firestore notification subscription warning:", err);
+      }
+    );
+
+    return () => {
+      unsubscribe();
+    };
+  }, [driver?.etm, (driver as any)?.ETM, driver?.id, driver?.phone, phoneNumber]);
+
   // Periodic Google Sheets sync interval (every 30 seconds)
   useEffect(() => {
     if (!accessToken) return;
@@ -379,7 +411,13 @@ export default function App() {
         }
         setTransactions(result.transactions);
         setDocuments(result.documents);
-        setNotifications(result.notifications);
+        if (result.notifications && result.notifications.length > 0) {
+          setNotifications((prev) => {
+            const existingIds = new Set(prev.map((n) => n.id));
+            const newSheetsNotifs = result.notifications.filter((n) => !existingIds.has(n.id));
+            return newSheetsNotifs.length > 0 ? [...prev, ...newSheetsNotifs] : prev;
+          });
+        }
         setPayments(result.payments || []);
         setOutstandingAmount(result.outstandingAmount !== undefined ? result.outstandingAmount : 0);
         setLastWeekOutstanding(result.lastWeekOutstanding !== undefined ? result.lastWeekOutstanding : 0);
@@ -621,11 +659,9 @@ export default function App() {
     setNotifications((prev) =>
       prev.map((notif) => (notif.id === id ? { ...notif, read: true, readAt: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) } : notif))
     );
-    if (accessToken) {
-      markNotificationReadInSheet(id, accessToken).catch((err) =>
-        console.error("Failed to mark notification as read in Google Sheet:", err)
-      );
-    }
+    markNotificationAsRead(id, accessToken).catch((err) =>
+      console.error("Failed to mark notification as read in Firestore:", err)
+    );
   };
 
   const handleRenewDocument = (docId: string) => {

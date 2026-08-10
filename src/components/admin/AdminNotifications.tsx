@@ -137,11 +137,14 @@ export default function AdminNotifications({
             className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#1E88E5]"
           >
             <option value="ALL">📢 All Active Fleet Drivers ({drivers.length})</option>
-            {drivers.map((d, idx) => (
-              <option key={`${d.id}-${d.mobile || idx}`} value={d.mobile || d.etmId}>
-                👤 {d.name} ({d.mobile}) - ETM: {d.etmId || "N/A"}
-              </option>
-            ))}
+            {drivers.map((d, idx) => {
+              const driverVal = d.etmId || d.id || d.mobile || `driver-${idx}`;
+              return (
+                <option key={`${d.id || idx}-${idx}`} value={driverVal}>
+                  👤 {d.name} ({d.mobile}) - ETM: {d.etmId || d.id || "N/A"}
+                </option>
+              );
+            })}
           </select>
         </div>
 

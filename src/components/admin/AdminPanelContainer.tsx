@@ -21,6 +21,7 @@ import {
   removeVehicleAssignmentInSheets,
   clearSheetCache
 } from "../../lib/sheets";
+import { dispatchDriverNotification } from "../../lib/notificationService";
 import { syncApprovedDriver, syncRejectedDriver, getVerificationStatus } from "../../lib/googleSheets";
 
 interface AdminPanelContainerProps {
@@ -256,19 +257,23 @@ export default function AdminPanelContainer({
     targetDriverName?: string,
     channel?: string
   ) => {
-    const res = await sendAdminNotificationToSheet(
+    const matchedDriver = drivers.find(
+      (d) => d.etmId === targetDriverEtm || d.id === targetDriverEtm || d.mobile === targetDriverEtm
+    );
+    const mobileNumber = matchedDriver?.mobile || "";
+
+    const res = await dispatchDriverNotification({
       title,
       message,
-      type,
-      targetDriverEtm,
-      targetDriverName,
+      alertLevel: type,
+      targetDriverEtm: targetDriverEtm || "ALL",
+      targetDriverName: targetDriverName || matchedDriver?.name || "Fleet Driver",
+      mobileNumber,
       channel,
-      currentAdminDriver?.name || "Admin Manager",
+      createdBy: currentAdminDriver?.name || "Admin Manager",
       accessToken
-    );
-    if (!res.success) {
-      throw new Error(res.message);
-    }
+    });
+
     return res;
   };
 
