@@ -58,20 +58,24 @@ export async function dispatchDriverNotification(params: SendNotificationParams)
 
   const notifData = {
     id: notifId,
+    notificationId: notifId,
     recipientType: cleanEtm === "ALL" ? "all" : "driver",
     recipientId: cleanEtm,
     driverId: cleanEtm,
+    etmId: cleanEtm,
     driverName: cleanName,
     mobileNumber: cleanMobile,
     title: title.trim(),
     message: message.trim(),
+    notificationType: alertLevel || "info",
     alertLevel: alertLevel || "info",
     channel: channel || "In-App Push Alert",
     createdAt: now.toISOString(),
     createdAtFormatted: nowFormatted,
     read: false,
     status: "sent",
-    createdBy: createdBy || "Admin Manager"
+    createdBy: createdBy || "Admin Manager",
+    sentBy: createdBy || "Admin Manager"
   };
 
   console.log("DISPATCHING DRIVER NOTIFICATION TO FIRESTORE:", notifData);

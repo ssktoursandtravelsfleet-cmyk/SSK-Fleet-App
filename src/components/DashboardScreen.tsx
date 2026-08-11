@@ -504,6 +504,38 @@ export default function DashboardScreen({
 
               {/* Notif Center List */}
               <div className="flex-1 overflow-y-auto p-4 space-y-3 no-scrollbar">
+                {/* Device Notification Permission Banner */}
+                {typeof window !== "undefined" && "Notification" in window && Notification.permission !== "granted" && (
+                  <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex flex-col gap-2">
+                    <div className="flex items-center gap-2 font-bold">
+                      <Bell className="w-4 h-4 text-amber-700 shrink-0" />
+                      <span>
+                        {Notification.permission === "denied"
+                          ? "Device Notifications Blocked"
+                          : "Enable Push & Vibration Alerts"}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-amber-800 leading-relaxed">
+                      {Notification.permission === "denied"
+                        ? "Notifications are blocked in your browser. Enable site permissions in your browser settings to receive vibration and real-time alerts."
+                        : "Allow notifications to receive instant vibration and sound alerts whenever a new fleet notice is published."}
+                    </p>
+                    {Notification.permission === "default" && (
+                      <button
+                        onClick={async () => {
+                          const res = await Notification.requestPermission();
+                          if (res === "granted") {
+                            window.location.reload();
+                          }
+                        }}
+                        className="self-start px-3 py-1.5 bg-amber-800 hover:bg-amber-900 text-white rounded-lg text-[10px] font-bold shadow-xs transition-colors cursor-pointer"
+                      >
+                        Enable Notifications Now
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 {notifications.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-16 text-slate-400">
                     <Bell className="w-10 h-10 stroke-1 mb-2 text-slate-300" />

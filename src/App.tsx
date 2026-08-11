@@ -29,8 +29,9 @@ import SSKLogo from "./components/SSKLogo";
 import { ActiveScreen, NotificationItem, VehicleDocument, TransactionItem, DriverDetails, PaymentRecord, DriverDocumentRecord } from "./types";
 import { mockDriver, mockDocuments, mockNotifications, mockTransactions } from "./data";
 import { initAuth, googleSignIn, logoutUser } from "./firebase";
-import { fetchAndParseAllSheets, getCachedSheetsData, appendOnboardingDocuments, uploadBase64Image, appendDriverOnboardingData, checkMobileInDriverSheet, writePaymentLog, SPREADSHEET_ID, authenticateDriverWithSheet, updateLastLogin, updateDriverProfileInSheets, saveDriverDocumentsToSheet, saveDriverDocumentsToVerificationSheet, fetchDriverDocumentsFromSheet, resolveDriverDisplayName, markNotificationReadInSheet } from "./lib/sheets";
+import { fetchAndParseAllSheets, getCachedSheetsData, appendOnboardingDocuments, uploadBase64Image, appendDriverOnboardingData, checkMobileInDriverSheet, writePaymentLog, SPREADSHEET_ID, authenticateDriverWithSheet, updateLastLogin, updateDriverProfileInSheets, saveDriverDocumentsToSheet, saveDriverDocumentsToVerificationSheet, fetchDriverDocumentsFromSheet, resolveDriverDisplayName, markNotificationReadInSheet, getEffectiveToken } from "./lib/sheets";
 import { subscribeToDriverNotifications, markNotificationAsRead } from "./lib/notificationService";
+import { registerDriverFcmToken, triggerDeviceVibration, isNotifProcessed, markNotifAsProcessed, showSystemNotification, registerServiceWorker, requestNotificationPermission } from "./lib/fcmService";
 import { DISPLAY_VERSION } from "./lib/version";
 
 export default function App() {
@@ -153,6 +154,7 @@ export default function App() {
     type: "success" | "warning" | "info"
   ) => {
     playNotificationSound();
+    triggerDeviceVibration([200, 100, 200]);
     setPushNotification({ title, message, type });
 
     // Try to trigger standard browser Web Push Notification
@@ -160,7 +162,7 @@ export default function App() {
       if ("Notification" in window && window.Notification.permission === "granted") {
         new window.Notification(title, {
           body: message,
-          icon: "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2245%22 fill=%22%2308182D%22 stroke=%22%23D5A144%22 stroke-width=%224%22/><text x=%2250%%22 y=%2270%%22 font-size=%2232%22 font-weight=%22900%22 fill=%22%23D5A144%22 text-anchor=%22middle%22 font-family=%22sans-serif%22>SSK</text></svg>"
+          icon: "/assets/ssk_official_logo_transparent.png"
         });
       }
     } catch (err) {
@@ -281,8 +283,10 @@ export default function App() {
             setAccessToken(token);
           }
 
-          // Fetch driver document record for profile photo
-          fetchDriverDocumentsFromSheet(session.Mobile_Number || session.ETM || session.Driver_ID || "", token)
+          // Fetch driver document record for profile photo and status
+          const sessMobile = session.Mobile_Number || session.phone || "";
+          const sessEtm = session.ETM || session.Driver_ID || session.etm || "";
+          fetchDriverDocumentsFromSheet(sessMobile, token, sessEtm)
             .then((docRec) => {
               if (docRec) {
                 setDocumentRecord(docRec);
@@ -373,6 +377,22 @@ export default function App() {
     }
   }, [isSplashFinished, pendingRedirect]);
 
+  // Ref to track initial load vs real-time incoming push notifications
+  const isInitialNotifLoadRef = React.useRef(true);
+
+  // Register Service Worker and FCM Token when driver is logged in
+  useEffect(() => {
+    registerServiceWorker();
+
+    const driverEtm = driver?.etm || (driver as any)?.ETM || (driver as any)?.etmId || driver?.id || "";
+    const driverPhone = phoneNumber || driver?.phone || (driver as any)?.mobile || "";
+    if (driverEtm || driverPhone) {
+      registerDriverFcmToken(driverEtm, driverPhone, driver?.id).catch((err) => {
+        console.warn("Driver FCM registration warning:", err);
+      });
+    }
+  }, [driver?.etm, (driver as any)?.ETM, (driver as any)?.etmId, driver?.id, driver?.phone, (driver as any)?.mobile, phoneNumber]);
+
   // Real-time Firestore notification listener for the logged-in driver
   useEffect(() => {
     const driverEtm = driver?.etm || (driver as any)?.ETM || (driver as any)?.etmId || driver?.id || "";
@@ -386,10 +406,62 @@ export default function App() {
       driverPhone,
       driverIdStr,
       (realtimeNotifs) => {
-        if (realtimeNotifs) {
-          console.log("SETTING REALTIME FIRESTORE NOTIFICATIONS IN APP STATE:", realtimeNotifs.length);
+        if (!realtimeNotifs) return;
+
+        console.log("SETTING REALTIME FIRESTORE NOTIFICATIONS IN APP STATE:", realtimeNotifs.length);
+
+        // Check if initial snapshot load
+        if (isInitialNotifLoadRef.current) {
+          // On boot, mark all loaded existing notification IDs as processed so we don't trigger vibration on past notifications
+          realtimeNotifs.forEach((n) => {
+            if (n?.id) markNotifAsProcessed(n.id);
+          });
+          isInitialNotifLoadRef.current = false;
           setNotifications(realtimeNotifs);
+          return;
         }
+
+        // On subsequent updates: find newly added notifications that haven't been processed yet
+        const freshUnreadNotifs = realtimeNotifs.filter(
+          (n) => n && n.id && !isNotifProcessed(n.id) && !n.read
+        );
+
+        if (freshUnreadNotifs.length > 0) {
+          freshUnreadNotifs.forEach((newNotif) => {
+            // 1. Mark ID as processed (duplicate prevention)
+            markNotifAsProcessed(newNotif.id);
+
+            // 2. Trigger Device Vibration: [200, 100, 200]
+            triggerDeviceVibration([200, 100, 200]);
+
+            // 3. Play Notification Chime Sound
+            playNotificationSound();
+
+            // 4. Show In-App Push Toast
+            const pushType: "success" | "warning" | "info" =
+              newNotif.type === "danger" || newNotif.type === "warning" ? "warning" : "success";
+            setPushNotification({
+              title: newNotif.title,
+              message: newNotif.message,
+              type: pushType
+            });
+
+            // 5. Show System/Browser Native Notification
+            showSystemNotification(
+              newNotif.title,
+              newNotif.message,
+              newNotif.id,
+              newNotif.etmId || driverEtm
+            );
+          });
+        } else {
+          // Mark all items as processed
+          realtimeNotifs.forEach((n) => {
+            if (n?.id) markNotifAsProcessed(n.id);
+          });
+        }
+
+        setNotifications(realtimeNotifs);
       },
       (err) => {
         console.warn("Realtime Firestore notification subscription warning:", err);
@@ -527,8 +599,10 @@ export default function App() {
         };
         setDriver(updatedDriver);
 
-        // Fetch document record for profile photo
-        fetchDriverDocumentsFromSheet(mobile || driverData.ETM || driverData.Driver_ID || "", accessToken)
+        // Fetch document record for profile photo and status
+        const logMobile = mobile || driverData.Mobile_Number || "";
+        const logEtm = driverData.ETM || driverData.Driver_ID || "";
+        fetchDriverDocumentsFromSheet(logMobile, accessToken, logEtm)
           .then((docRec) => {
             if (docRec) {
               setDocumentRecord(docRec);
@@ -1062,7 +1136,9 @@ export default function App() {
       setMsgFormatRows(result.msgFormatRows);
 
       try {
-        const docRec = await fetchDriverDocumentsFromSheet(phoneNumber || driver?.etm || driver?.phone || "", accessToken);
+        const syncMobile = phoneNumber || driver?.phone || driver?.Mobile_Number || "";
+        const syncEtm = driver?.etm || driver?.ETM || "";
+        const docRec = await fetchDriverDocumentsFromSheet(syncMobile, accessToken, syncEtm);
         if (docRec) {
           setDocumentRecord(docRec);
         }
@@ -1155,11 +1231,11 @@ export default function App() {
     dlNumber?: string;
     bankPassbook?: string;
   }) => {
-    let token = accessToken;
+    let token = getEffectiveToken(accessToken);
     if (!token) {
       try {
         const authResult = await googleSignIn();
-        if (authResult) {
+        if (authResult && authResult.accessToken) {
           token = authResult.accessToken;
           setAccessToken(authResult.accessToken);
         }
@@ -1174,7 +1250,7 @@ export default function App() {
     const driverId = driver?.id || "";
 
     if (!etm || !phone) {
-      throw new Error("Driver credentials (ETM ID or Mobile Number) missing.");
+      throw new Error("Both ETM ID and Mobile Number are required to save driver documents.");
     }
 
     const result = await saveDriverDocumentsToVerificationSheet(
@@ -1189,7 +1265,7 @@ export default function App() {
     );
 
     if (!result.success) {
-      throw new Error(result.message);
+      throw new Error(result.message || "Unable to save documents. Please try again.");
     }
 
     if (result.updatedRecord) {

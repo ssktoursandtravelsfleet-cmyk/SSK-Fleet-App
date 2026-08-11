@@ -2398,50 +2398,72 @@ export async function saveDriverDocumentsToVerificationSheet(
     const driverName = driverData.driverName || "Driver";
     const driverId = driverData.driverId || (cleanEtm ? `DR-${cleanEtm}` : `DR-${cleanMobile}`);
 
+    console.log("[DOCUMENT SAVE] Logged-in Driver ID:", driverId);
+    console.log("[DOCUMENT SAVE] ETM ID:", cleanEtm);
+    console.log("[DOCUMENT SAVE] Mobile:", cleanMobile);
+
     if (!cleanEtm || !cleanMobile) {
-      throw new Error("Both ETM ID and Mobile Number are required to update driver documents.");
+      throw new Error("Both ETM ID and Mobile Number are required to save driver documents.");
     }
 
-    // Upload new image files if base64 data URIs
-    const profilePhotoUrl = docUpdates.profilePhoto
-      ? await uploadFileToGoogleDrive(docUpdates.profilePhoto, `Profile_${cleanEtm}.jpg`, accessToken)
-      : "";
-    const aadhaarFrontUrl = docUpdates.aadhaarFront
-      ? await uploadFileToGoogleDrive(docUpdates.aadhaarFront, `Aadhaar_${cleanEtm}.jpg`, accessToken)
-      : "";
-    const panCardUrl = docUpdates.panCard
-      ? await uploadFileToGoogleDrive(docUpdates.panCard, `PAN_${cleanEtm}.jpg`, accessToken)
-      : "";
-    const dlFrontUrl = docUpdates.dlFront
-      ? await uploadFileToGoogleDrive(docUpdates.dlFront, `DL_${cleanEtm}.jpg`, accessToken)
-      : "";
-    const bankPassbookUrl = docUpdates.bankPassbook
-      ? await uploadFileToGoogleDrive(docUpdates.bankPassbook, `BankPassbook_${cleanEtm}.jpg`, accessToken)
-      : "";
-
-    let rows: string[][] = [];
-    if (accessToken) {
-      rows = await fetchSheetValues(SPREADSHEET_ID, sheetName, accessToken).catch(() => []);
+    const effectiveToken = getEffectiveToken(accessToken);
+    if (!effectiveToken) {
+      throw new Error("Unable to save documents. Google OAuth authorization missing. Please sign in with Google.");
     }
 
-    const HEADERS = [
-      "Driver ID",
-      "ETM ID",
-      "Driver Name",
-      "Mobile Number",
-      "Aadhaar",
-      "Aadhaar No",
-      "PAN Card",
-      "PAN Card No",
-      "Driving Licence",
-      "Driving Licence No",
-      "Bank Passbook",
-      "Profile Photo",
-      "Document Status",
-      "Verified By",
-      "Verification Date",
-      "Remarks"
-    ];
+    // Helper function to safely upload base64 image data to Google Drive or fallback image host
+    const uploadDocImage = async (base64OrUrl?: string, fileName?: string): Promise<string> => {
+      if (!base64OrUrl || !base64OrUrl.trim()) return "";
+      if (base64OrUrl.startsWith("http://") || base64OrUrl.startsWith("https://")) {
+        return base64OrUrl;
+      }
+      if (!base64OrUrl.startsWith("data:")) {
+        return base64OrUrl;
+      }
+
+      // 1. Try Google Drive upload
+      let uploadedUrl = "";
+      try {
+        uploadedUrl = await uploadFileToGoogleDrive(base64OrUrl, fileName || "document.jpg", effectiveToken);
+      } catch (driveErr) {
+        console.warn(`[DOCUMENT SAVE] Drive upload failed for ${fileName}, attempting image host fallback:`, driveErr);
+      }
+
+      if (uploadedUrl && (uploadedUrl.startsWith("http://") || uploadedUrl.startsWith("https://"))) {
+        return uploadedUrl;
+      }
+
+      // 2. Fallback to uploadBase64Image
+      try {
+        const fallbackUrl = await uploadBase64Image(base64OrUrl, fileName || "document.jpg");
+        if (fallbackUrl && (fallbackUrl.startsWith("http://") || fallbackUrl.startsWith("https://"))) {
+          return fallbackUrl;
+        }
+      } catch (fallbackErr) {
+        console.error(`[DOCUMENT SAVE] Fallback upload failed for ${fileName}:`, fallbackErr);
+      }
+
+      throw new Error(`Failed to upload file (${fileName || "Document"}). Please select a valid image and try again.`);
+    };
+
+    // Upload new image files if base64
+    const profilePhotoUrl = await uploadDocImage(docUpdates.profilePhoto, `Profile_${cleanEtm}.jpg`);
+    console.log("[DOCUMENT SAVE] Profile photo upload:", profilePhotoUrl || "(unchanged)");
+
+    const aadhaarFrontUrl = await uploadDocImage(docUpdates.aadhaarFront, `Aadhaar_${cleanEtm}.jpg`);
+    console.log("[DOCUMENT SAVE] Aadhaar upload:", aadhaarFrontUrl || "(unchanged)");
+
+    const panCardUrl = await uploadDocImage(docUpdates.panCard, `PAN_${cleanEtm}.jpg`);
+    console.log("[DOCUMENT SAVE] PAN upload:", panCardUrl || "(unchanged)");
+
+    const dlFrontUrl = await uploadDocImage(docUpdates.dlFront, `DL_${cleanEtm}.jpg`);
+    console.log("[DOCUMENT SAVE] Driving Licence upload:", dlFrontUrl || "(unchanged)");
+
+    const bankPassbookUrl = await uploadDocImage(docUpdates.bankPassbook, `BankPassbook_${cleanEtm}.jpg`);
+    console.log("[DOCUMENT SAVE] Passbook upload:", bankPassbookUrl || "(unchanged)");
+
+    // Fetch existing rows from Documents_Verification
+    const rows = await fetchSheetValues(SPREADSHEET_ID, sheetName, effectiveToken);
 
     let matchedRowIndex = -1;
     let existingRow: string[] = [];
@@ -2462,50 +2484,76 @@ export async function saveDriverDocumentsToVerificationSheet(
       }
     }
 
+    console.log("[DOCUMENT SAVE] Matching row:", matchedRowIndex !== -1 ? `Row ${matchedRowIndex + 1}` : "None found (Will create new row)");
+
     // Construct merged row values (A to P, length 16)
     // Always set Document Status (Column M / index 12) to "Pending"
     const rowValues = [
-      existingRow[0] || driverId,                      // A: Driver ID
-      cleanEtm,                                        // B: ETM ID
-      existingRow[2] || driverName,                    // C: Driver Name
-      cleanMobile,                                     // D: Mobile Number
-      aadhaarFrontUrl || existingRow[4] || "",          // E: Aadhaar upload URL
-      docUpdates.aadhaarNumber !== undefined ? docUpdates.aadhaarNumber : (existingRow[5] || ""), // F: Aadhaar No
-      panCardUrl || existingRow[6] || "",               // G: PAN Card upload URL
-      docUpdates.panNumber !== undefined ? docUpdates.panNumber : (existingRow[7] || ""),         // H: PAN Card No
-      dlFrontUrl || existingRow[8] || "",              // I: Driving Licence upload URL
-      docUpdates.dlNumber !== undefined ? docUpdates.dlNumber : (existingRow[9] || ""),           // J: Driving Licence No
-      bankPassbookUrl || existingRow[10] || "",         // K: Bank Passbook upload URL
-      profilePhotoUrl || existingRow[11] || "",         // L: Profile Photo upload URL
-      "Pending",                                       // M: Document Status -> Pending
-      "",                                              // N: Verified By
-      "",                                              // O: Verification Date
-      ""                                               // P: Remarks
+      existingRow[0] || driverId,                                                                                            // A: Driver ID
+      cleanEtm,                                                                                                              // B: ETM ID
+      existingRow[2] || driverName,                                                                                          // C: Driver Name
+      cleanMobile,                                                                                                           // D: Mobile Number
+      aadhaarFrontUrl || existingRow[4] || "",                                                                               // E: Aadhaar upload URL
+      docUpdates.aadhaarNumber !== undefined && docUpdates.aadhaarNumber.trim() !== "" ? docUpdates.aadhaarNumber.trim() : (existingRow[5] || ""), // F: Aadhaar No
+      panCardUrl || existingRow[6] || "",                                                                                    // G: PAN Card upload URL
+      docUpdates.panNumber !== undefined && docUpdates.panNumber.trim() !== "" ? docUpdates.panNumber.trim() : (existingRow[7] || ""),         // H: PAN Card No
+      dlFrontUrl || existingRow[8] || "",                                                                                    // I: Driving Licence upload URL
+      docUpdates.dlNumber !== undefined && docUpdates.dlNumber.trim() !== "" ? docUpdates.dlNumber.trim() : (existingRow[9] || ""),           // J: Driving Licence No
+      bankPassbookUrl || existingRow[10] || "",                                                                              // K: Bank Passbook upload URL
+      profilePhotoUrl || existingRow[11] || "",                                                                              // L: Profile Photo upload URL
+      "Pending",                                                                                                             // M: Document Status -> Pending
+      existingRow[13] || "",                                                                                                 // N: Verified By
+      existingRow[14] || "",                                                                                                 // O: Verification Date
+      existingRow[15] || ""                                                                                                  // P: Remarks
     ];
 
-    if (accessToken) {
-      if (matchedRowIndex !== -1) {
-        // Update existing matched row
-        const cellRange = `${sheetName}!A${matchedRowIndex + 1}:P${matchedRowIndex + 1}`;
-        const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(cellRange)}?valueInputOption=USER_ENTERED`;
-        await fetch(url, {
-          method: "PUT",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({ values: [rowValues] })
-        });
-      } else {
-        // No matching row exists -> Append new row
-        if (!rows || rows.length === 0) {
-          await appendSheetRows(SPREADSHEET_ID, sheetName, [HEADERS], accessToken).catch(() => {});
-        }
-        await appendSheetRows(SPREADSHEET_ID, sheetName, [rowValues], accessToken).catch(() => {});
+    console.log("[DOCUMENT SAVE] Sheet row update:", rowValues);
+
+    let sheetResponse: any = null;
+
+    if (matchedRowIndex !== -1) {
+      // Update existing matched row
+      const cellRange = `${sheetName}!A${matchedRowIndex + 1}:P${matchedRowIndex + 1}`;
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(cellRange)}?valueInputOption=USER_ENTERED`;
+      const res = await fetch(url, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${effectiveToken}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ values: [rowValues] })
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        console.error("[DOCUMENT SAVE] Sheet row update HTTP error:", res.status, errText);
+        throw new Error(`Google Sheets write failed (${res.status}): ${errText}`);
       }
+      sheetResponse = await res.json();
+    } else {
+      // No matching row exists -> Append new row
+      const HEADERS = [
+        "Driver ID", "ETM ID", "Driver Name", "Mobile Number",
+        "Aadhaar", "Aadhaar No", "PAN Card", "PAN Card No",
+        "Driving Licence", "Driving Licence No", "Bank Passbook", "Profile Photo",
+        "Document Status", "Verified By", "Verification Date", "Remarks"
+      ];
+      if (!rows || rows.length === 0) {
+        await appendSheetRows(SPREADSHEET_ID, sheetName, [HEADERS], effectiveToken);
+      }
+      sheetResponse = await appendSheetRows(SPREADSHEET_ID, sheetName, [rowValues], effectiveToken);
     }
 
-    const updatedRecord: import("../types").DriverDocumentRecord = {
+    console.log("[DOCUMENT SAVE] Sheet response:", sheetResponse);
+
+    // Clear cache to ensure subsequent fetches read updated values live
+    sheetValuesCache.clear();
+
+    // Verification / refetch saved row
+    const refetchedRecord = await fetchDriverDocumentsFromSheet(cleanMobile, effectiveToken, cleanEtm);
+    console.log("[DOCUMENT SAVE] Verification/refetch:", refetchedRecord);
+
+    const finalRecord = refetchedRecord || {
       registrationDateTime: "",
       driverName: rowValues[2],
       mobileNumber: rowValues[3],
@@ -2531,16 +2579,18 @@ export async function saveDriverDocumentsToVerificationSheet(
       isLocked: false
     };
 
+    console.log("[DOCUMENT SAVE] FINAL RESULT: SUCCESS", finalRecord);
+
     return {
       success: true,
-      message: "Driver documents updated successfully! Verification status set to Pending.",
-      updatedRecord
+      message: "Documents submitted successfully! Verification status set to Pending.",
+      updatedRecord: finalRecord
     };
   } catch (err: any) {
-    console.error("Error saving driver documents to Documents_Verification:", err);
+    console.error("[DOCUMENT SAVE] FINAL RESULT: ERROR", err);
     return {
       success: false,
-      message: err?.message || "Failed to save driver documents to Google Sheet."
+      message: err?.message || "Unable to save documents. Please try again."
     };
   }
 }
@@ -2835,7 +2885,7 @@ export async function fetchDriverDocumentsFromSheet(
             dlBackUrl: "",
             bankPassbookUrl: matchedRow[10] || "",
             policeVerificationUrl: "",
-            status: matchedRow[12] || "Pending",
+            status: (matchedRow[12] ? String(matchedRow[12]).trim() : "").toLowerCase() === "approved" ? "Approved" : "Pending",
             lastUpdated: matchedRow[14] || "",
             isLocked: false
           };
@@ -2887,7 +2937,7 @@ export async function fetchDriverDocumentsFromSheet(
             dlBackUrl: row[17] || "",
             bankPassbookUrl: row[18] || "",
             policeVerificationUrl: row[19] || "",
-            status: row[20] || "Pending",
+            status: (row[20] ? String(row[20]).trim() : "").toLowerCase() === "approved" ? "Approved" : "Pending",
             lastUpdated: row[21] || "",
             isLocked: false
           };
@@ -3629,8 +3679,9 @@ export async function fetchAllAdminData(accessToken?: string | null): Promise<{
         const etm = row[1] ? String(row[1]).trim() : "";
         const rawName = row[2] ? String(row[2]).trim() : "";
         const mobile = row[3] ? String(row[3]).trim() : "";
-        // Column I (index 8) is Verification Status!
-        const docVerificationStatus = row[8] ? String(row[8]).trim() : (row[12] ? String(row[12]).trim() : "Pending");
+        // Column M (index 12) is Document Status in Documents_Verification
+        const rawDocM = row[12] ? String(row[12]).trim() : "";
+        const docVerificationStatus = rawDocM.toLowerCase() === "approved" ? "Approved" : "Pending";
 
         const resolved = resolveDriverDetails(mobile, etm, id, rawName);
         const key = resolved.mobile.replace(/\D/g, "").slice(-10) || resolved.etmId.toUpperCase() || resolved.id;

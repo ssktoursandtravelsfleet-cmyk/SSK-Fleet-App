@@ -189,7 +189,8 @@ export default function ProfileScreen({
         }
       }
     } catch (err: any) {
-      setDocError(err?.message || "Failed to save document details.");
+      console.error("[DOCUMENT SAVE] ProfileScreen error saving documents:", err);
+      setDocError(err?.message || "Unable to save documents. Please try again.");
     } finally {
       setIsSavingDocs(false);
     }
@@ -531,17 +532,13 @@ export default function ProfileScreen({
 
               {/* Status Badge */}
               <div className="flex items-center gap-1.5">
-                {documentRecord?.status === "Approved" || documentRecord?.status === "Verified" ? (
+                {documentRecord?.status === "Approved" ? (
                   <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
                     <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Approved
                   </span>
-                ) : documentRecord?.status === "Rejected" ? (
-                  <span className="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800 text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
-                    <AlertCircle className="w-3.5 h-3.5 text-rose-600" /> Rejected
-                  </span>
                 ) : (
                   <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
-                    <Clock className="w-3.5 h-3.5 text-amber-600" /> Pending Verification
+                    <Clock className="w-3.5 h-3.5 text-amber-600" /> Pending
                   </span>
                 )}
               </div>
