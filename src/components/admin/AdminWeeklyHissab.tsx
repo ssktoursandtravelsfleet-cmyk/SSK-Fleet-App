@@ -343,14 +343,18 @@ export default function AdminWeeklyHissab({
       if (colIndices.rentIdx !== -1 && row[colIndices.rentIdx]) {
         totalRental += parseNum(row[colIndices.rentIdx]);
       }
+      let osVal: number | null = null;
       if (colIndices.totalOsIdx !== -1 && row[colIndices.totalOsIdx]) {
-        totalOutstanding += parseNum(row[colIndices.totalOsIdx]);
+        osVal = parseNum(row[colIndices.totalOsIdx]);
       } else {
         // Fallback search last column for outstanding
         const lastVal = row[row.length - 1];
         if (lastVal && isNumericVal(lastVal)) {
-          totalOutstanding += parseNum(lastVal);
+          osVal = parseNum(lastVal);
         }
+      }
+      if (osVal !== null && !isNaN(osVal) && osVal < 0) {
+        totalOutstanding += Math.abs(osVal);
       }
     });
 

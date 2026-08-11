@@ -47,9 +47,24 @@ export default function AdminOutstandingManagement({
     return `₹${num.toLocaleString("en-IN")}`;
   };
 
-  const totalCurrentOutstanding = drivers.reduce((acc, d) => acc + (d.currentOutstanding || 0), 0);
-  const totalWeeklyOutstanding = drivers.reduce((acc, d) => acc + (d.weeklyOutstanding || 0), 0);
-  const totalOutstanding = drivers.reduce((acc, d) => acc + (d.totalOutstanding !== undefined ? d.totalOutstanding : ((d.currentOutstanding || 0) + (d.weeklyOutstanding || 0))), 0);
+  const parseNumVal = (val: any): number => typeof val === "number" ? val : (Number(String(val || 0).replace(/[^0-9.-]/g, "")) || 0);
+
+  const calcNegativeSum = (vals: (number | string | undefined | null)[]): number => {
+    return vals.reduce<number>((acc, v) => {
+      if (v === undefined || v === null || v === "") return acc;
+      const num = typeof v === "number" ? v : Number(String(v).replace(/[^0-9.-]/g, ""));
+      if (!isNaN(num) && num < 0) {
+        return acc + Math.abs(num);
+      }
+      return acc;
+    }, 0);
+  };
+
+  const totalCurrentOutstanding = calcNegativeSum(drivers.map(d => d.currentOutstanding));
+  const totalWeeklyOutstanding = calcNegativeSum(drivers.map(d => d.weeklyOutstanding));
+  const totalOutstanding = calcNegativeSum(
+    drivers.map(d => d.totalOutstanding !== undefined ? d.totalOutstanding : (parseNumVal(d.currentOutstanding) + parseNumVal(d.weeklyOutstanding)))
+  );
 
   const filteredDrivers = drivers.filter(d =>
     d.name.toLowerCase().includes(searchTerm.toLowerCase()) ||

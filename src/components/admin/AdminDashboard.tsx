@@ -41,12 +41,28 @@ export default function AdminDashboard({
   const inactiveDrivers = drivers.filter(d => d.status === "Inactive" || d.status === "Suspended" || d.status === "Rejected").length;
   const vehiclesAssigned = vehicles.filter(v => v.assignedDriverId || v.assignedDriverEtm || v.status === "Active").length;
 
+  const parseNumVal = (val: any): number => typeof val === "number" ? val : (Number(String(val || 0).replace(/[^0-9.-]/g, "")) || 0);
+
+  // Helper to sum only negative outstanding values (converted to ABS)
+  const calcNegativeSum = (vals: (number | string | undefined | null)[]): number => {
+    return vals.reduce<number>((acc, v) => {
+      if (v === undefined || v === null || v === "") return acc;
+      const num = typeof v === "number" ? v : Number(String(v).replace(/[^0-9.-]/g, ""));
+      if (!isNaN(num) && num < 0) {
+        return acc + Math.abs(num);
+      }
+      return acc;
+    }, 0);
+  };
+
   // Earnings & Outstanding Summaries
-  const dailyEarningsTotal = drivers.reduce((acc, d) => acc + (d.dailyEarnings || 0), 0);
-  const weeklyEarningsTotal = drivers.reduce((acc, d) => acc + (d.totalEarnings || 0), 0);
-  const currentOutstandingTotal = drivers.reduce((acc, d) => acc + (d.currentOutstanding || 0), 0);
-  const weeklyOutstandingTotal = drivers.reduce((acc, d) => acc + (d.weeklyOutstanding || 0), 0);
-  const totalOutstandingTotal = drivers.reduce((acc, d) => acc + (d.totalOutstanding !== undefined ? d.totalOutstanding : ((d.currentOutstanding || 0) + (d.weeklyOutstanding || 0))), 0);
+  const dailyEarningsTotal = drivers.reduce((acc, d) => acc + parseNumVal(d.dailyEarnings), 0);
+  const weeklyEarningsTotal = drivers.reduce((acc, d) => acc + parseNumVal(d.totalEarnings), 0);
+  const currentOutstandingTotal = calcNegativeSum(drivers.map(d => d.currentOutstanding));
+  const weeklyOutstandingTotal = calcNegativeSum(drivers.map(d => d.weeklyOutstanding));
+  const totalOutstandingTotal = calcNegativeSum(
+    drivers.map(d => d.totalOutstanding !== undefined ? d.totalOutstanding : (parseNumVal(d.currentOutstanding) + parseNumVal(d.weeklyOutstanding)))
+  );
 
   const statsList = [
     {
