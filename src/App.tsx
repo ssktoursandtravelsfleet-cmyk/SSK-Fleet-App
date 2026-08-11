@@ -29,7 +29,7 @@ import SSKLogo from "./components/SSKLogo";
 import { ActiveScreen, NotificationItem, VehicleDocument, TransactionItem, DriverDetails, PaymentRecord, DriverDocumentRecord } from "./types";
 import { mockDriver, mockDocuments, mockNotifications, mockTransactions } from "./data";
 import { initAuth, googleSignIn, logoutUser } from "./firebase";
-import { fetchAndParseAllSheets, getCachedSheetsData, appendOnboardingDocuments, uploadBase64Image, appendDriverOnboardingData, checkMobileInDriverSheet, writePaymentLog, SPREADSHEET_ID, authenticateDriverWithSheet, updateLastLogin, updateDriverProfileInSheets, saveDriverDocumentsToSheet, fetchDriverDocumentsFromSheet, resolveDriverDisplayName, markNotificationReadInSheet } from "./lib/sheets";
+import { fetchAndParseAllSheets, getCachedSheetsData, appendOnboardingDocuments, uploadBase64Image, appendDriverOnboardingData, checkMobileInDriverSheet, writePaymentLog, SPREADSHEET_ID, authenticateDriverWithSheet, updateLastLogin, updateDriverProfileInSheets, saveDriverDocumentsToSheet, saveDriverDocumentsToVerificationSheet, fetchDriverDocumentsFromSheet, resolveDriverDisplayName, markNotificationReadInSheet } from "./lib/sheets";
 import { subscribeToDriverNotifications, markNotificationAsRead } from "./lib/notificationService";
 import { DISPLAY_VERSION } from "./lib/version";
 
@@ -1145,6 +1145,63 @@ export default function App() {
     }
   };
 
+  const handleSaveDriverDocuments = async (docUpdates: {
+    profilePhoto?: string;
+    aadhaarFront?: string;
+    aadhaarNumber?: string;
+    panCard?: string;
+    panNumber?: string;
+    dlFront?: string;
+    dlNumber?: string;
+    bankPassbook?: string;
+  }) => {
+    let token = accessToken;
+    if (!token) {
+      try {
+        const authResult = await googleSignIn();
+        if (authResult) {
+          token = authResult.accessToken;
+          setAccessToken(authResult.accessToken);
+        }
+      } catch (err) {
+        console.warn("OAuth sign-in prompt skipped or failed:", err);
+      }
+    }
+
+    const etm = driver?.etm || driver?.ETM || "";
+    const phone = phoneNumber || driver?.phone || driver?.Mobile_Number || "";
+    const name = driver?.name || driver?.Driver_Name || "Driver";
+    const driverId = driver?.id || "";
+
+    if (!etm || !phone) {
+      throw new Error("Driver credentials (ETM ID or Mobile Number) missing.");
+    }
+
+    const result = await saveDriverDocumentsToVerificationSheet(
+      {
+        etmId: etm,
+        mobileNumber: phone,
+        driverName: name,
+        driverId: driverId
+      },
+      docUpdates,
+      token
+    );
+
+    if (!result.success) {
+      throw new Error(result.message);
+    }
+
+    if (result.updatedRecord) {
+      setDocumentRecord(result.updatedRecord);
+    } else {
+      const freshDoc = await fetchDriverDocumentsFromSheet(phone, token, etm);
+      if (freshDoc) {
+        setDocumentRecord(freshDoc);
+      }
+    }
+  };
+
   // Push notification auto-dismiss timer
   useEffect(() => {
     if (pushNotification) {
@@ -1243,6 +1300,7 @@ export default function App() {
             syncState={syncState}
             onOpenDrawer={() => setIsDrawerOpen(true)}
             onUpdateDriver={handleUpdateDriver}
+            onSaveDriverDocuments={handleSaveDriverDocuments}
             onOpenOnboarding={() => setActiveScreen(ActiveScreen.ONBOARDING)}
             isDarkMode={isDarkMode}
             onToggleDarkMode={toggleDarkMode}

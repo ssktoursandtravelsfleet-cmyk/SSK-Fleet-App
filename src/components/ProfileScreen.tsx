@@ -16,7 +16,10 @@ import {
   Upload,
   X,
   Sun,
-  Moon
+  Moon,
+  Clock,
+  ExternalLink,
+  ZoomIn
 } from "lucide-react";
 import { DriverDetails, DriverDocumentRecord } from "../types";
 import PullToRefresh from "./PullToRefresh";
@@ -29,6 +32,18 @@ interface ProfileScreenProps {
   syncState?: 'idle' | 'syncing' | 'synced' | 'failed';
   onOpenDrawer: () => void;
   onUpdateDriver?: (updatedFields: Partial<DriverDetails>) => Promise<void>;
+  onSaveDriverDocuments?: (
+    docUpdates: {
+      profilePhoto?: string;
+      aadhaarFront?: string;
+      aadhaarNumber?: string;
+      panCard?: string;
+      panNumber?: string;
+      dlFront?: string;
+      dlNumber?: string;
+      bankPassbook?: string;
+    }
+  ) => Promise<void>;
   onOpenOnboarding?: () => void;
   isDarkMode?: boolean;
   onToggleDarkMode?: () => void;
@@ -41,6 +56,7 @@ export default function ProfileScreen({
   syncState,
   onOpenDrawer,
   onUpdateDriver,
+  onSaveDriverDocuments,
   onOpenOnboarding,
   isDarkMode = false,
   onToggleDarkMode
@@ -63,11 +79,121 @@ export default function ProfileScreen({
 
   const [previewDoc, setPreviewDoc] = useState<{ title: string; url: string } | null>(null);
 
+  // Document Fields State
+  const [aadhaarNo, setAadhaarNo] = useState(documentRecord?.aadhaarNumber || "");
+  const [panNo, setPanNo] = useState(documentRecord?.panNumber || "");
+  const [dlNo, setDlNo] = useState(documentRecord?.dlNumber || "");
+
+  const [profilePhotoPreview, setProfilePhotoPreview] = useState(documentRecord?.profilePhotoUrl || driver?.avatarUrl || "");
+  const [aadhaarFrontPreview, setAadhaarFrontPreview] = useState(documentRecord?.aadhaarFrontUrl || "");
+  const [panCardPreview, setPanCardPreview] = useState(documentRecord?.panCardUrl || "");
+  const [dlFrontPreview, setDlFrontPreview] = useState(documentRecord?.dlFrontUrl || "");
+  const [bankPassbookPreview, setBankPassbookPreview] = useState(documentRecord?.bankPassbookUrl || "");
+
+  const [isSavingDocs, setIsSavingDocs] = useState(false);
+  const [docError, setDocError] = useState("");
+  const [docSuccess, setDocSuccess] = useState("");
+
+  const profilePhotoRef = React.useRef<HTMLInputElement>(null);
+  const aadhaarFrontRef = React.useRef<HTMLInputElement>(null);
+  const panCardRef = React.useRef<HTMLInputElement>(null);
+  const dlFrontRef = React.useRef<HTMLInputElement>(null);
+  const bankPassbookRef = React.useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     setFormName(name);
     setFormMobile(mobile === "N/A" ? "" : mobile);
     setFormEmail(email === "N/A" ? "" : email);
   }, [driver]);
+
+  useEffect(() => {
+    if (documentRecord) {
+      if (documentRecord.aadhaarNumber !== undefined) setAadhaarNo(documentRecord.aadhaarNumber);
+      if (documentRecord.panNumber !== undefined) setPanNo(documentRecord.panNumber);
+      if (documentRecord.dlNumber !== undefined) setDlNo(documentRecord.dlNumber);
+      if (documentRecord.profilePhotoUrl) setProfilePhotoPreview(documentRecord.profilePhotoUrl);
+      if (documentRecord.aadhaarFrontUrl) setAadhaarFrontPreview(documentRecord.aadhaarFrontUrl);
+      if (documentRecord.panCardUrl) setPanCardPreview(documentRecord.panCardUrl);
+      if (documentRecord.dlFrontUrl) setDlFrontPreview(documentRecord.dlFrontUrl);
+      if (documentRecord.bankPassbookUrl) setBankPassbookPreview(documentRecord.bankPassbookUrl);
+    }
+  }, [documentRecord]);
+
+  const handleFileChange = (field: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setDocError("Please select a valid image file (PNG/JPG).");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const base64 = ev.target?.result as string;
+      if (field === "profilePhoto") setProfilePhotoPreview(base64);
+      if (field === "aadhaarFront") setAadhaarFrontPreview(base64);
+      if (field === "panCard") setPanCardPreview(base64);
+      if (field === "dlFront") setDlFrontPreview(base64);
+      if (field === "bankPassbook") setBankPassbookPreview(base64);
+      setDocError("");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveDriverDocuments = async () => {
+    setDocError("");
+    setDocSuccess("");
+
+    // Validate Aadhaar Number
+    if (aadhaarNo) {
+      const cleanAadhaar = aadhaarNo.replace(/[\s-]/g, "");
+      if (!/^\d{12}$/.test(cleanAadhaar)) {
+        setDocError("Aadhaar Number must be a valid 12-digit number.");
+        return;
+      }
+    }
+
+    // Validate PAN Number
+    if (panNo) {
+      const cleanPan = panNo.trim().toUpperCase();
+      if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(cleanPan)) {
+        setDocError("PAN Number must be 5 letters, 4 numbers, 1 letter (e.g. ABCDE1234F).");
+        return;
+      }
+    }
+
+    // Validate DL Number
+    if (dlNo) {
+      const cleanDl = dlNo.trim();
+      if (cleanDl.length < 5 || !/^[A-Za-z0-9\s\/-]{5,25}$/.test(cleanDl)) {
+        setDocError("Driving Licence Number must be at least 5 alphanumeric characters.");
+        return;
+      }
+    }
+
+    setIsSavingDocs(true);
+    try {
+      if (onSaveDriverDocuments) {
+        await onSaveDriverDocuments({
+          profilePhoto: profilePhotoPreview,
+          aadhaarFront: aadhaarFrontPreview,
+          aadhaarNumber: aadhaarNo.replace(/[\s-]/g, ""),
+          panCard: panCardPreview,
+          panNumber: panNo.trim().toUpperCase(),
+          dlFront: dlFrontPreview,
+          dlNumber: dlNo.trim(),
+          bankPassbook: bankPassbookPreview
+        });
+        setDocSuccess("Documents submitted successfully! Verification status set to Pending.");
+        if (onRefresh) {
+          await onRefresh();
+        }
+      }
+    } catch (err: any) {
+      setDocError(err?.message || "Failed to save document details.");
+    } finally {
+      setIsSavingDocs(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -395,98 +521,374 @@ export default function ProfileScreen({
             )}
           </div>
 
-          {/* 3. Driver Documents Section */}
+          {/* 3. Driver Documents & Verification Section */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-xs border border-slate-100 dark:border-slate-800 space-y-4 transition-colors duration-200">
             <div className="flex items-center justify-between">
               <div>
-                <h4 className="text-xs font-black text-slate-800 dark:text-slate-100 uppercase tracking-wider">Driver Documents</h4>
-                <p className="text-[10px] text-slate-400 dark:text-slate-400 font-semibold">Submitted verification records</p>
+                <h4 className="text-xs font-black text-slate-800 dark:text-slate-100 uppercase tracking-wider">Driver Documents & Verification</h4>
+                <p className="text-[10px] text-slate-400 dark:text-slate-400 font-semibold">Upload and update official document records</p>
               </div>
 
-              {isLocked ? (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200/80 dark:border-amber-800/80 text-amber-800 dark:text-amber-300">
-                  <Lock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                  <span className="text-[10px] font-black uppercase tracking-wider">Locked by Admin</span>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={onOpenOnboarding}
-                  className="px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 text-xs font-black flex items-center gap-1"
-                >
-                  <Upload className="w-3.5 h-3.5" />
-                  <span>Upload / Update</span>
-                </button>
-              )}
+              {/* Status Badge */}
+              <div className="flex items-center gap-1.5">
+                {documentRecord?.status === "Approved" || documentRecord?.status === "Verified" ? (
+                  <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
+                    <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Approved
+                  </span>
+                ) : documentRecord?.status === "Rejected" ? (
+                  <span className="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800 text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5 text-rose-600" /> Rejected
+                  </span>
+                ) : (
+                  <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-amber-600" /> Pending Verification
+                  </span>
+                )}
+              </div>
             </div>
 
-            {/* List of Documents */}
-            <div className="grid grid-cols-1 gap-2.5">
-              {docItems.map((doc) => {
-                const hasFile = !!doc.url;
+            {/* Error/Success Feedbacks */}
+            {docError && (
+              <div className="p-3 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 rounded-2xl flex items-center gap-2 text-rose-700 dark:text-rose-300 text-xs font-semibold">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{docError}</span>
+              </div>
+            )}
+            {docSuccess && (
+              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 rounded-2xl flex items-center gap-2 text-emerald-700 dark:text-emerald-300 text-xs font-semibold">
+                <CheckCircle className="w-4 h-4 shrink-0" />
+                <span>{docSuccess}</span>
+              </div>
+            )}
 
-                return (
-                  <div
-                    key={doc.id}
-                    className="flex items-center justify-between p-3 bg-slate-50/80 dark:bg-slate-800/80 rounded-2xl border border-slate-100/80 dark:border-slate-700/80 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${hasFile ? "bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300" : "bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400"}`}>
-                        <FileText className="w-5 h-5" />
-                      </div>
+            {/* Hidden File Inputs */}
+            <input type="file" ref={profilePhotoRef} accept="image/*" className="hidden" onChange={(e) => handleFileChange("profilePhoto", e)} />
+            <input type="file" ref={aadhaarFrontRef} accept="image/*" className="hidden" onChange={(e) => handleFileChange("aadhaarFront", e)} />
+            <input type="file" ref={panCardRef} accept="image/*" className="hidden" onChange={(e) => handleFileChange("panCard", e)} />
+            <input type="file" ref={dlFrontRef} accept="image/*" className="hidden" onChange={(e) => handleFileChange("dlFront", e)} />
+            <input type="file" ref={bankPassbookRef} accept="image/*" className="hidden" onChange={(e) => handleFileChange("bankPassbook", e)} />
 
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="text-xs font-extrabold text-slate-800 dark:text-slate-100 truncate">{doc.title}</p>
-                          {hasFile ? (
-                            <span className="px-1.5 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 text-[9px] font-black uppercase flex items-center gap-0.5">
-                              <Check className="w-2.5 h-2.5" /> Uploaded
-                            </span>
-                          ) : (
-                            <span className="px-1.5 py-0.5 rounded-md bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 text-[9px] font-black uppercase">
-                              Pending
-                            </span>
-                          )}
+            {/* Document List with Cards */}
+            <div className="space-y-3">
+              {/* 1. Profile Photo */}
+              <div className="p-3.5 bg-slate-50/80 dark:bg-slate-800/80 rounded-2xl border border-slate-100 dark:border-slate-700 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {profilePhotoPreview ? (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewDoc({ title: "Profile Photo", url: profilePhotoPreview })}
+                        className="w-12 h-12 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shrink-0 relative group cursor-pointer shadow-xs hover:ring-2 hover:ring-emerald-500/50 transition-all"
+                        title="Click to view full-size Profile Photo"
+                      >
+                        <img src={profilePhotoPreview} alt="Profile Photo" className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                          <ZoomIn className="w-4 h-4" />
                         </div>
-                        <p className="text-[10px] text-slate-400 dark:text-slate-400 font-semibold truncate mt-0.5">{doc.subText}</p>
+                      </button>
+                    ) : (
+                      <div className="w-12 h-12 rounded-xl bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 flex items-center justify-center font-bold shrink-0">
+                        <User className="w-6 h-6" />
                       </div>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                      {hasFile && (
-                        <button
-                          type="button"
-                          onClick={() => setPreviewDoc({ title: doc.title, url: doc.url! })}
-                          className="px-3 py-1.5 bg-blue-50 dark:bg-blue-900/50 hover:bg-blue-100 dark:hover:bg-blue-800/60 text-blue-700 dark:text-blue-300 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          <span>View</span>
-                        </button>
-                      )}
-
-                      {isLocked ? (
-                        <button
-                          type="button"
-                          onClick={handleEditLockedDocument}
-                          className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/50 rounded-lg transition-colors cursor-pointer"
-                          title="Locked"
-                        >
-                          <Lock className="w-4 h-4" />
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={onOpenOnboarding}
-                          className="p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/50 rounded-lg transition-colors cursor-pointer"
-                          title="Edit Document"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </button>
-                      )}
+                    )}
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => profilePhotoPreview && setPreviewDoc({ title: "Profile Photo", url: profilePhotoPreview })}
+                        className={`text-xs font-extrabold text-left block ${profilePhotoPreview ? "text-slate-800 dark:text-slate-100 hover:text-emerald-600 dark:hover:text-emerald-400 cursor-pointer" : "text-slate-800 dark:text-slate-100"}`}
+                      >
+                        Profile Photo
+                      </button>
+                      <p className="text-[10px] text-slate-400 font-semibold">Face selfie for driver profile</p>
                     </div>
                   </div>
-                );
-              })}
+                  <div className="flex items-center gap-2">
+                    {profilePhotoPreview && (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewDoc({ title: "Profile Photo", url: profilePhotoPreview })}
+                        className="px-2.5 py-1.5 bg-blue-50 dark:bg-blue-900/50 hover:bg-blue-100 text-blue-700 dark:text-blue-300 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                      >
+                        <Eye className="w-3.5 h-3.5" /> View
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => profilePhotoRef.current?.click()}
+                      className="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 rounded-xl text-xs font-black flex items-center gap-1 cursor-pointer transition-colors"
+                    >
+                      <Upload className="w-3.5 h-3.5" /> Upload / Change
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. Aadhaar Card */}
+              <div className="p-3.5 bg-slate-50/80 dark:bg-slate-800/80 rounded-2xl border border-slate-100 dark:border-slate-700 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {aadhaarFrontPreview ? (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewDoc({ title: "Aadhaar Card", url: aadhaarFrontPreview })}
+                        className="w-12 h-12 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shrink-0 relative group cursor-pointer shadow-xs hover:ring-2 hover:ring-emerald-500/50 transition-all"
+                        title="Click to view full-size Aadhaar Card"
+                      >
+                        <img src={aadhaarFrontPreview} alt="Aadhaar Card" className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                          <ZoomIn className="w-4 h-4" />
+                        </div>
+                      </button>
+                    ) : (
+                      <div className="w-12 h-12 rounded-xl bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 flex items-center justify-center font-bold shrink-0">
+                        <FileText className="w-6 h-6" />
+                      </div>
+                    )}
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => aadhaarFrontPreview && setPreviewDoc({ title: "Aadhaar Card", url: aadhaarFrontPreview })}
+                        className={`text-xs font-extrabold text-left block ${aadhaarFrontPreview ? "text-slate-800 dark:text-slate-100 hover:text-emerald-600 dark:hover:text-emerald-400 cursor-pointer" : "text-slate-800 dark:text-slate-100"}`}
+                      >
+                        Aadhaar Card
+                      </button>
+                      <p className="text-[10px] text-slate-400 font-semibold">Government UIDAI Card</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {aadhaarFrontPreview && (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewDoc({ title: "Aadhaar Card", url: aadhaarFrontPreview })}
+                        className="px-2.5 py-1.5 bg-blue-50 dark:bg-blue-900/50 hover:bg-blue-100 text-blue-700 dark:text-blue-300 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                      >
+                        <Eye className="w-3.5 h-3.5" /> View
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => aadhaarFrontRef.current?.click()}
+                      className="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 rounded-xl text-xs font-black flex items-center gap-1 cursor-pointer transition-colors"
+                    >
+                      <Upload className="w-3.5 h-3.5" /> Upload / Change
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Aadhaar Number</label>
+                  <input
+                    type="text"
+                    value={aadhaarNo}
+                    onChange={(e) => setAadhaarNo(e.target.value)}
+                    placeholder="Enter 12-digit Aadhaar Number"
+                    maxLength={14}
+                    className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              {/* 3. PAN Card */}
+              <div className="p-3.5 bg-slate-50/80 dark:bg-slate-800/80 rounded-2xl border border-slate-100 dark:border-slate-700 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {panCardPreview ? (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewDoc({ title: "PAN Card", url: panCardPreview })}
+                        className="w-12 h-12 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shrink-0 relative group cursor-pointer shadow-xs hover:ring-2 hover:ring-emerald-500/50 transition-all"
+                        title="Click to view full-size PAN Card"
+                      >
+                        <img src={panCardPreview} alt="PAN Card" className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                          <ZoomIn className="w-4 h-4" />
+                        </div>
+                      </button>
+                    ) : (
+                      <div className="w-12 h-12 rounded-xl bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 flex items-center justify-center font-bold shrink-0">
+                        <FileText className="w-6 h-6" />
+                      </div>
+                    )}
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => panCardPreview && setPreviewDoc({ title: "PAN Card", url: panCardPreview })}
+                        className={`text-xs font-extrabold text-left block ${panCardPreview ? "text-slate-800 dark:text-slate-100 hover:text-emerald-600 dark:hover:text-emerald-400 cursor-pointer" : "text-slate-800 dark:text-slate-100"}`}
+                      >
+                        PAN Card
+                      </button>
+                      <p className="text-[10px] text-slate-400 font-semibold">Permanent Account Number</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {panCardPreview && (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewDoc({ title: "PAN Card", url: panCardPreview })}
+                        className="px-2.5 py-1.5 bg-blue-50 dark:bg-blue-900/50 hover:bg-blue-100 text-blue-700 dark:text-blue-300 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                      >
+                        <Eye className="w-3.5 h-3.5" /> View
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => panCardRef.current?.click()}
+                      className="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 rounded-xl text-xs font-black flex items-center gap-1 cursor-pointer transition-colors"
+                    >
+                      <Upload className="w-3.5 h-3.5" /> Upload / Change
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">PAN Number</label>
+                  <input
+                    type="text"
+                    value={panNo}
+                    onChange={(e) => setPanNo(e.target.value.toUpperCase())}
+                    placeholder="Enter 10-character PAN (e.g. ABCDE1234F)"
+                    maxLength={10}
+                    className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-100 uppercase focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              {/* 4. Driving Licence */}
+              <div className="p-3.5 bg-slate-50/80 dark:bg-slate-800/80 rounded-2xl border border-slate-100 dark:border-slate-700 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {dlFrontPreview ? (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewDoc({ title: "Driving Licence", url: dlFrontPreview })}
+                        className="w-12 h-12 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shrink-0 relative group cursor-pointer shadow-xs hover:ring-2 hover:ring-emerald-500/50 transition-all"
+                        title="Click to view full-size Driving Licence"
+                      >
+                        <img src={dlFrontPreview} alt="Driving Licence" className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                          <ZoomIn className="w-4 h-4" />
+                        </div>
+                      </button>
+                    ) : (
+                      <div className="w-12 h-12 rounded-xl bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 flex items-center justify-center font-bold shrink-0">
+                        <FileText className="w-6 h-6" />
+                      </div>
+                    )}
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => dlFrontPreview && setPreviewDoc({ title: "Driving Licence", url: dlFrontPreview })}
+                        className={`text-xs font-extrabold text-left block ${dlFrontPreview ? "text-slate-800 dark:text-slate-100 hover:text-emerald-600 dark:hover:text-emerald-400 cursor-pointer" : "text-slate-800 dark:text-slate-100"}`}
+                      >
+                        Driving Licence
+                      </button>
+                      <p className="text-[10px] text-slate-400 font-semibold">Official Driver Permit</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {dlFrontPreview && (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewDoc({ title: "Driving Licence", url: dlFrontPreview })}
+                        className="px-2.5 py-1.5 bg-blue-50 dark:bg-blue-900/50 hover:bg-blue-100 text-blue-700 dark:text-blue-300 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                      >
+                        <Eye className="w-3.5 h-3.5" /> View
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => dlFrontRef.current?.click()}
+                      className="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 rounded-xl text-xs font-black flex items-center gap-1 cursor-pointer transition-colors"
+                    >
+                      <Upload className="w-3.5 h-3.5" /> Upload / Change
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Licence Number</label>
+                  <input
+                    type="text"
+                    value={dlNo}
+                    onChange={(e) => setDlNo(e.target.value.toUpperCase())}
+                    placeholder="Enter Licence Number"
+                    maxLength={20}
+                    className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-100 uppercase focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              {/* 5. Bank Passbook */}
+              <div className="p-3.5 bg-slate-50/80 dark:bg-slate-800/80 rounded-2xl border border-slate-100 dark:border-slate-700 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {bankPassbookPreview ? (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewDoc({ title: "Bank Passbook", url: bankPassbookPreview })}
+                        className="w-12 h-12 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shrink-0 relative group cursor-pointer shadow-xs hover:ring-2 hover:ring-emerald-500/50 transition-all"
+                        title="Click to view full-size Bank Passbook"
+                      >
+                        <img src={bankPassbookPreview} alt="Bank Passbook" className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                          <ZoomIn className="w-4 h-4" />
+                        </div>
+                      </button>
+                    ) : (
+                      <div className="w-12 h-12 rounded-xl bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 flex items-center justify-center font-bold shrink-0">
+                        <FileText className="w-6 h-6" />
+                      </div>
+                    )}
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => bankPassbookPreview && setPreviewDoc({ title: "Bank Passbook", url: bankPassbookPreview })}
+                        className={`text-xs font-extrabold text-left block ${bankPassbookPreview ? "text-slate-800 dark:text-slate-100 hover:text-emerald-600 dark:hover:text-emerald-400 cursor-pointer" : "text-slate-800 dark:text-slate-100"}`}
+                      >
+                        Bank Passbook / Cheque
+                      </button>
+                      <p className="text-[10px] text-slate-400 font-semibold">Bank verification document</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {bankPassbookPreview && (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewDoc({ title: "Bank Passbook", url: bankPassbookPreview })}
+                        className="px-2.5 py-1.5 bg-blue-50 dark:bg-blue-900/50 hover:bg-blue-100 text-blue-700 dark:text-blue-300 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                      >
+                        <Eye className="w-3.5 h-3.5" /> View
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => bankPassbookRef.current?.click()}
+                      className="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 rounded-xl text-xs font-black flex items-center gap-1 cursor-pointer transition-colors"
+                    >
+                      <Upload className="w-3.5 h-3.5" /> Upload / Change
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Save Button */}
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={handleSaveDriverDocuments}
+                disabled={isSavingDocs}
+                className="w-full py-3 bg-[#0A2540] hover:bg-[#07192c] dark:bg-emerald-600 dark:hover:bg-emerald-700 text-white rounded-2xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isSavingDocs ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Saving to Sheet...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    <span>Save & Sync Documents</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
 
@@ -520,39 +922,77 @@ export default function ProfileScreen({
       {previewDoc && (
         <div
           onClick={() => setPreviewDoc(null)}
-          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-fade-in"
+          className="fixed inset-0 bg-black/80 backdrop-blur-md z-[9999] flex items-center justify-center p-3 sm:p-5 animate-fade-in"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white dark:bg-slate-900 rounded-3xl p-5 max-w-lg w-full max-h-[85vh] flex flex-col gap-3 shadow-2xl relative border border-slate-100 dark:border-slate-800"
+            className="bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-5 max-w-xl w-full max-h-[90vh] flex flex-col gap-3 shadow-2xl relative border border-slate-100 dark:border-slate-800 transition-all"
           >
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="text-sm font-extrabold text-slate-800 dark:text-white">{previewDoc.title}</h3>
-              <button
-                onClick={() => setPreviewDoc(null)}
-                className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                <h3 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-wider">{previewDoc.title}</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                {previewDoc.url.startsWith("http") && (
+                  <a
+                    href={previewDoc.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors flex items-center gap-1 text-xs font-bold"
+                    title="Open in new tab"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    <span className="hidden sm:inline">Open</span>
+                  </a>
+                )}
+                <button
+                  onClick={() => setPreviewDoc(null)}
+                  className="p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-colors cursor-pointer"
+                  title="Close preview"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
-            <div className="flex-1 overflow-auto rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex items-center justify-center p-2 min-h-[250px]">
+            {/* Image Preview Container */}
+            <div className="flex-1 overflow-auto rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-950/90 flex items-center justify-center p-3 min-h-[300px] relative group">
               {previewDoc.url.startsWith("http") || previewDoc.url.startsWith("data:image") ? (
                 <img
                   src={previewDoc.url}
                   alt={previewDoc.title}
-                  className="max-w-full max-h-[60vh] object-contain rounded-xl"
+                  className="max-w-full max-h-[65vh] object-contain rounded-xl shadow-lg transition-transform duration-200 group-hover:scale-[1.02]"
                 />
               ) : (
-                <a
-                  href={previewDoc.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-5 py-3 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-colors"
-                >
-                  Open Document Link ↗
-                </a>
+                <div className="text-center p-6 space-y-3">
+                  <p className="text-xs font-bold text-slate-300">Document available at external URL</p>
+                  <a
+                    href={previewDoc.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors shadow-md"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    <span>Open External Document ↗</span>
+                  </a>
+                </div>
               )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-between pt-1">
+              <p className="text-[10px] text-slate-400 dark:text-slate-400 font-semibold">
+                Tap anywhere outside to close preview
+              </p>
+              <button
+                type="button"
+                onClick={() => setPreviewDoc(null)}
+                className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold cursor-pointer transition-colors"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

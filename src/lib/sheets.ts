@@ -2370,130 +2370,123 @@ export async function uploadFileToGoogleDrive(
   return base64OrUrl;
 }
 
-export async function saveDriverDocumentsToSheet(
-  docRecord: Partial<import("../types").DriverDocumentRecord>,
+export async function saveDriverDocumentsToVerificationSheet(
+  driverData: {
+    etmId: string;
+    mobileNumber: string;
+    driverName?: string;
+    driverId?: string;
+  },
+  docUpdates: {
+    profilePhoto?: string;
+    aadhaarFront?: string;
+    aadhaarNumber?: string;
+    panCard?: string;
+    panNumber?: string;
+    dlFront?: string;
+    dlNumber?: string;
+    bankPassbook?: string;
+  },
   accessToken?: string | null
-): Promise<{ success: boolean; isLocked?: boolean; message: string }> {
+): Promise<{ success: boolean; message: string; updatedRecord?: import("../types").DriverDocumentRecord }> {
   try {
     validateConfig(SPREADSHEET_ID);
-    const sheetName = "Driver_Documents";
+    const sheetName = "Documents_Verification";
 
-    const searchMobile = docRecord.mobileNumber ? docRecord.mobileNumber.replace(/\D/g, "").slice(-10) : "";
-    const searchEtm = docRecord.etmId ? docRecord.etmId.trim().toUpperCase() : "";
+    const cleanMobile = driverData.mobileNumber ? driverData.mobileNumber.replace(/\D/g, "").slice(-10) : "";
+    const cleanEtm = driverData.etmId ? driverData.etmId.trim().toUpperCase() : "";
+    const driverName = driverData.driverName || "Driver";
+    const driverId = driverData.driverId || (cleanEtm ? `DR-${cleanEtm}` : `DR-${cleanMobile}`);
+
+    if (!cleanEtm || !cleanMobile) {
+      throw new Error("Both ETM ID and Mobile Number are required to update driver documents.");
+    }
+
+    // Upload new image files if base64 data URIs
+    const profilePhotoUrl = docUpdates.profilePhoto
+      ? await uploadFileToGoogleDrive(docUpdates.profilePhoto, `Profile_${cleanEtm}.jpg`, accessToken)
+      : "";
+    const aadhaarFrontUrl = docUpdates.aadhaarFront
+      ? await uploadFileToGoogleDrive(docUpdates.aadhaarFront, `Aadhaar_${cleanEtm}.jpg`, accessToken)
+      : "";
+    const panCardUrl = docUpdates.panCard
+      ? await uploadFileToGoogleDrive(docUpdates.panCard, `PAN_${cleanEtm}.jpg`, accessToken)
+      : "";
+    const dlFrontUrl = docUpdates.dlFront
+      ? await uploadFileToGoogleDrive(docUpdates.dlFront, `DL_${cleanEtm}.jpg`, accessToken)
+      : "";
+    const bankPassbookUrl = docUpdates.bankPassbook
+      ? await uploadFileToGoogleDrive(docUpdates.bankPassbook, `BankPassbook_${cleanEtm}.jpg`, accessToken)
+      : "";
 
     let rows: string[][] = [];
     if (accessToken) {
-      try {
-        rows = await fetchSheetValues(SPREADSHEET_ID, sheetName, accessToken);
-      } catch (err) {
-        console.warn(`Could not fetch ${sheetName} sheet, will create/append...`, err);
-      }
+      rows = await fetchSheetValues(SPREADSHEET_ID, sheetName, accessToken).catch(() => []);
     }
 
-    const EXPECTED_HEADERS = [
-      "Registration Date & Time",
+    const HEADERS = [
+      "Driver ID",
+      "ETM ID",
       "Driver Name",
       "Mobile Number",
-      "ETM ID",
-      "Aadhaar Number",
-      "PAN Number",
-      "Driving License Number",
-      "Address",
-      "Date of Birth",
-      "Emergency Contact",
-      "Vehicle Number",
-      "Vehicle Model",
-      "Profile Photo URL",
-      "Aadhaar Front URL",
-      "Aadhaar Back URL",
-      "PAN Card URL",
-      "Driving License Front URL",
-      "Driving License Back URL",
-      "Bank Passbook / Cancelled Cheque URL",
-      "Police Verification URL",
-      "Status",
-      "Last Updated",
-      "Document Locked"
+      "Aadhaar",
+      "Aadhaar No",
+      "PAN Card",
+      "PAN Card No",
+      "Driving Licence",
+      "Driving Licence No",
+      "Bank Passbook",
+      "Profile Photo",
+      "Document Status",
+      "Verified By",
+      "Verification Date",
+      "Remarks"
     ];
 
-    let targetRowIndex = -1;
-    let existingLockStatus = false;
+    let matchedRowIndex = -1;
+    let existingRow: string[] = [];
 
     if (rows && rows.length > 0) {
-      const headers = rows[0].map(h => normalizeHeader(h));
-      const mobileIdx = headers.findIndex(h => ["mobilenumber", "mobile", "phone"].includes(h));
-      const etmIdx = headers.findIndex(h => ["etmid", "etm", "etmno"].includes(h));
-      const lockIdx = headers.findIndex(h => ["documentlocked", "locked", "doclocked", "statuslocked"].includes(h));
-
-      const useMobileIdx = mobileIdx !== -1 ? mobileIdx : 2;
-      const useEtmIdx = etmIdx !== -1 ? etmIdx : 3;
-      const useLockIdx = lockIdx !== -1 ? lockIdx : 22;
-
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
         if (!row || row.length === 0) continue;
-        const cellMobile = row[useMobileIdx] ? String(row[useMobileIdx]).replace(/\D/g, "").slice(-10) : "";
-        const cellEtm = row[useEtmIdx] ? String(row[useEtmIdx]).trim().toUpperCase() : "";
+        const cellEtm = row[1] ? String(row[1]).trim().toUpperCase() : "";
+        const cellMobile = row[3] ? String(row[3]).replace(/\D/g, "").slice(-10) : "";
 
-        if ((searchEtm && cellEtm === searchEtm) || (searchMobile && cellMobile === searchMobile)) {
-          targetRowIndex = i;
-          const lockVal = row[useLockIdx] ? String(row[useLockIdx]).trim().toUpperCase() : "";
-          if (["TRUE", "LOCKED", "YES", "1"].includes(lockVal)) {
-            existingLockStatus = true;
-          }
+        // Strictly MATCH BOTH ETM ID and Mobile Number
+        if (cellEtm === cleanEtm && cellMobile === cleanMobile) {
+          matchedRowIndex = i;
+          existingRow = row;
           break;
         }
       }
     }
 
-    if (targetRowIndex !== -1 && existingLockStatus) {
-      return {
-        success: false,
-        isLocked: true,
-        message: "Your documents have already been submitted successfully. To update any document, please contact the Admin."
-      };
-    }
-
-    const nowStr = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
-
-    const profilePhotoUrl = await uploadFileToGoogleDrive(docRecord.profilePhotoUrl || "", `Profile_${searchMobile || searchEtm}.jpg`, accessToken);
-    const aadhaarFrontUrl = await uploadFileToGoogleDrive(docRecord.aadhaarFrontUrl || "", `Aadhaar_Front_${searchMobile || searchEtm}.jpg`, accessToken);
-    const aadhaarBackUrl = await uploadFileToGoogleDrive(docRecord.aadhaarBackUrl || "", `Aadhaar_Back_${searchMobile || searchEtm}.jpg`, accessToken);
-    const panCardUrl = await uploadFileToGoogleDrive(docRecord.panCardUrl || "", `PAN_${searchMobile || searchEtm}.jpg`, accessToken);
-    const dlFrontUrl = await uploadFileToGoogleDrive(docRecord.dlFrontUrl || "", `DL_Front_${searchMobile || searchEtm}.jpg`, accessToken);
-    const dlBackUrl = await uploadFileToGoogleDrive(docRecord.dlBackUrl || "", `DL_Back_${searchMobile || searchEtm}.jpg`, accessToken);
-    const bankPassbookUrl = await uploadFileToGoogleDrive(docRecord.bankPassbookUrl || "", `Bank_Passbook_${searchMobile || searchEtm}.jpg`, accessToken);
-    const policeVerificationUrl = await uploadFileToGoogleDrive(docRecord.policeVerificationUrl || "", `Police_Verification_${searchMobile || searchEtm}.jpg`, accessToken);
-
+    // Construct merged row values (A to P, length 16)
+    // Always set Document Status (Column M / index 12) to "Pending"
     const rowValues = [
-      docRecord.registrationDateTime || nowStr,
-      docRecord.driverName || "",
-      docRecord.mobileNumber || "",
-      docRecord.etmId || "",
-      docRecord.aadhaarNumber || "",
-      docRecord.panNumber || "",
-      docRecord.dlNumber || "",
-      docRecord.address || "",
-      docRecord.dob || "",
-      docRecord.emergencyContact || "",
-      docRecord.vehicleNumber || "",
-      docRecord.vehicleModel || "",
-      profilePhotoUrl,
-      aadhaarFrontUrl,
-      aadhaarBackUrl,
-      panCardUrl,
-      dlFrontUrl,
-      dlBackUrl,
-      bankPassbookUrl,
-      policeVerificationUrl,
-      docRecord.status || "Submitted",
-      nowStr,
-      "TRUE"
+      existingRow[0] || driverId,                      // A: Driver ID
+      cleanEtm,                                        // B: ETM ID
+      existingRow[2] || driverName,                    // C: Driver Name
+      cleanMobile,                                     // D: Mobile Number
+      aadhaarFrontUrl || existingRow[4] || "",          // E: Aadhaar upload URL
+      docUpdates.aadhaarNumber !== undefined ? docUpdates.aadhaarNumber : (existingRow[5] || ""), // F: Aadhaar No
+      panCardUrl || existingRow[6] || "",               // G: PAN Card upload URL
+      docUpdates.panNumber !== undefined ? docUpdates.panNumber : (existingRow[7] || ""),         // H: PAN Card No
+      dlFrontUrl || existingRow[8] || "",              // I: Driving Licence upload URL
+      docUpdates.dlNumber !== undefined ? docUpdates.dlNumber : (existingRow[9] || ""),           // J: Driving Licence No
+      bankPassbookUrl || existingRow[10] || "",         // K: Bank Passbook upload URL
+      profilePhotoUrl || existingRow[11] || "",         // L: Profile Photo upload URL
+      "Pending",                                       // M: Document Status -> Pending
+      "",                                              // N: Verified By
+      "",                                              // O: Verification Date
+      ""                                               // P: Remarks
     ];
 
     if (accessToken) {
-      if (targetRowIndex !== -1) {
-        const cellRange = `${sheetName}!A${targetRowIndex + 1}:W${targetRowIndex + 1}`;
+      if (matchedRowIndex !== -1) {
+        // Update existing matched row
+        const cellRange = `${sheetName}!A${matchedRowIndex + 1}:P${matchedRowIndex + 1}`;
         const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(cellRange)}?valueInputOption=USER_ENTERED`;
         await fetch(url, {
           method: "PUT",
@@ -2504,36 +2497,83 @@ export async function saveDriverDocumentsToSheet(
           body: JSON.stringify({ values: [rowValues] })
         });
       } else {
+        // No matching row exists -> Append new row
         if (!rows || rows.length === 0) {
-          try {
-            await appendSheetRows(SPREADSHEET_ID, sheetName, [EXPECTED_HEADERS], accessToken);
-          } catch (e) {
-            console.warn("Header append warning:", e);
-          }
+          await appendSheetRows(SPREADSHEET_ID, sheetName, [HEADERS], accessToken).catch(() => {});
         }
-        await appendSheetRows(SPREADSHEET_ID, sheetName, [rowValues], accessToken);
+        await appendSheetRows(SPREADSHEET_ID, sheetName, [rowValues], accessToken).catch(() => {});
       }
     }
 
-    // Auto sync registration data across all connected sheets (Driver_Verification, Documents_Verification, Driver_Master, Driver_Login)
-    try {
-      await autoSyncRegistrationToAllSheets(docRecord, accessToken);
-    } catch (e) {
-      console.warn("Auto sync registration error:", e);
-    }
+    const updatedRecord: import("../types").DriverDocumentRecord = {
+      registrationDateTime: "",
+      driverName: rowValues[2],
+      mobileNumber: rowValues[3],
+      etmId: rowValues[1],
+      aadhaarNumber: rowValues[5],
+      panNumber: rowValues[7],
+      dlNumber: rowValues[9],
+      address: "",
+      dob: "",
+      emergencyContact: "",
+      vehicleNumber: "",
+      vehicleModel: "",
+      profilePhotoUrl: rowValues[11],
+      aadhaarFrontUrl: rowValues[4],
+      aadhaarBackUrl: "",
+      panCardUrl: rowValues[6],
+      dlFrontUrl: rowValues[8],
+      dlBackUrl: "",
+      bankPassbookUrl: rowValues[10],
+      policeVerificationUrl: "",
+      status: "Pending",
+      lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }),
+      isLocked: false
+    };
 
     return {
       success: true,
-      isLocked: true,
-      message: "Driver documents saved and locked successfully!"
+      message: "Driver documents updated successfully! Verification status set to Pending.",
+      updatedRecord
     };
   } catch (err: any) {
-    console.error("Error saving driver documents to sheet:", err);
+    console.error("Error saving driver documents to Documents_Verification:", err);
     return {
       success: false,
-      message: err?.message || "Failed to save documents to Google Sheet."
+      message: err?.message || "Failed to save driver documents to Google Sheet."
     };
   }
+}
+
+export async function saveDriverDocumentsToSheet(
+  docRecord: Partial<import("../types").DriverDocumentRecord>,
+  accessToken?: string | null
+): Promise<{ success: boolean; isLocked?: boolean; message: string }> {
+  const result = await saveDriverDocumentsToVerificationSheet(
+    {
+      etmId: docRecord.etmId || "",
+      mobileNumber: docRecord.mobileNumber || "",
+      driverName: docRecord.driverName || "",
+      driverId: docRecord.driverName || ""
+    },
+    {
+      profilePhoto: docRecord.profilePhotoUrl,
+      aadhaarFront: docRecord.aadhaarFrontUrl,
+      aadhaarNumber: docRecord.aadhaarNumber,
+      panCard: docRecord.panCardUrl,
+      panNumber: docRecord.panNumber,
+      dlFront: docRecord.dlFrontUrl,
+      dlNumber: docRecord.dlNumber,
+      bankPassbook: docRecord.bankPassbookUrl
+    },
+    accessToken
+  );
+
+  return {
+    success: result.success,
+    isLocked: false,
+    message: result.message
+  };
 }
 
 /**
@@ -2730,60 +2770,128 @@ export async function autoSyncRegistrationToAllSheets(
 
 export async function fetchDriverDocumentsFromSheet(
   mobileOrEtm: string,
-  accessToken?: string | null
+  accessToken?: string | null,
+  etmIdParam?: string
 ): Promise<import("../types").DriverDocumentRecord | null> {
-  if (!mobileOrEtm) return null;
+  if (!mobileOrEtm && !etmIdParam) return null;
   try {
     validateConfig(SPREADSHEET_ID);
+    const searchMobile = mobileOrEtm ? mobileOrEtm.replace(/\D/g, "").slice(-10) : "";
+    const searchEtm = (etmIdParam || mobileOrEtm || "").trim().toUpperCase();
+
+    // 1. Try fetching from Documents_Verification (Single Source of Truth)
+    try {
+      const docvRows = await fetchSheetValues(SPREADSHEET_ID, "Documents_Verification", accessToken);
+      if (docvRows && docvRows.length > 1) {
+        let matchedRow: string[] | null = null;
+
+        // Search for row matching BOTH ETM ID and Mobile Number
+        for (let i = 1; i < docvRows.length; i++) {
+          const row = docvRows[i];
+          if (!row || row.length === 0) continue;
+          const cellEtm = row[1] ? String(row[1]).trim().toUpperCase() : "";
+          const cellMobile = row[3] ? String(row[3]).replace(/\D/g, "").slice(-10) : "";
+
+          if (searchEtm && searchMobile && cellEtm === searchEtm && cellMobile === searchMobile) {
+            matchedRow = row;
+            break;
+          }
+        }
+
+        // Fallback search if single param provided or no row matched both
+        if (!matchedRow) {
+          for (let i = 1; i < docvRows.length; i++) {
+            const row = docvRows[i];
+            if (!row || row.length === 0) continue;
+            const cellEtm = row[1] ? String(row[1]).trim().toUpperCase() : "";
+            const cellMobile = row[3] ? String(row[3]).replace(/\D/g, "").slice(-10) : "";
+
+            if ((searchEtm && cellEtm === searchEtm) || (searchMobile && cellMobile === searchMobile)) {
+              matchedRow = row;
+              break;
+            }
+          }
+        }
+
+        if (matchedRow) {
+          return {
+            registrationDateTime: "",
+            driverName: matchedRow[2] || "",
+            mobileNumber: matchedRow[3] || searchMobile,
+            etmId: matchedRow[1] || searchEtm,
+            aadhaarNumber: matchedRow[5] || "",
+            panNumber: matchedRow[7] || "",
+            dlNumber: matchedRow[9] || "",
+            address: "",
+            dob: "",
+            emergencyContact: "",
+            vehicleNumber: "",
+            vehicleModel: "",
+            profilePhotoUrl: matchedRow[11] || "",
+            aadhaarFrontUrl: matchedRow[4] || "",
+            aadhaarBackUrl: "",
+            panCardUrl: matchedRow[6] || "",
+            dlFrontUrl: matchedRow[8] || "",
+            dlBackUrl: "",
+            bankPassbookUrl: matchedRow[10] || "",
+            policeVerificationUrl: "",
+            status: matchedRow[12] || "Pending",
+            lastUpdated: matchedRow[14] || "",
+            isLocked: false
+          };
+        }
+      }
+    } catch (e) {
+      console.warn("Could not fetch Documents_Verification sheet:", e);
+    }
+
+    // 2. Fallback to Driver_Documents for legacy records
     const sheetName = "Driver_Documents";
     const searchNorm = mobileOrEtm.trim().toUpperCase().replace(/\D/g, "").slice(-10) || mobileOrEtm.trim().toUpperCase();
 
-    const rows = await fetchSheetValues(SPREADSHEET_ID, sheetName, accessToken);
-    if (!rows || rows.length <= 1) return null;
+    const rows = await fetchSheetValues(SPREADSHEET_ID, sheetName, accessToken).catch(() => []);
+    if (rows && rows.length > 1) {
+      const headers = rows[0].map(h => normalizeHeader(h));
+      const mobileIdx = headers.findIndex(h => ["mobilenumber", "mobile", "phone"].includes(h));
+      const etmIdx = headers.findIndex(h => ["etmid", "etm", "etmno"].includes(h));
 
-    const headers = rows[0].map(h => normalizeHeader(h));
-    const mobileIdx = headers.findIndex(h => ["mobilenumber", "mobile", "phone"].includes(h));
-    const etmIdx = headers.findIndex(h => ["etmid", "etm", "etmno"].includes(h));
+      const useMobileIdx = mobileIdx !== -1 ? mobileIdx : 2;
+      const useEtmIdx = etmIdx !== -1 ? etmIdx : 3;
 
-    const useMobileIdx = mobileIdx !== -1 ? mobileIdx : 2;
-    const useEtmIdx = etmIdx !== -1 ? etmIdx : 3;
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row || row.length === 0) continue;
 
-    for (let i = 1; i < rows.length; i++) {
-      const row = rows[i];
-      if (!row || row.length === 0) continue;
+        const cellMobile = row[useMobileIdx] ? String(row[useMobileIdx]).replace(/\D/g, "").slice(-10) : "";
+        const cellEtm = row[useEtmIdx] ? String(row[useEtmIdx]).trim().toUpperCase() : "";
 
-      const cellMobile = row[useMobileIdx] ? String(row[useMobileIdx]).replace(/\D/g, "").slice(-10) : "";
-      const cellEtm = row[useEtmIdx] ? String(row[useEtmIdx]).trim().toUpperCase() : "";
-
-      if ((cellEtm && cellEtm === searchNorm) || (cellMobile && cellMobile === searchNorm)) {
-        const lockVal = row[22] ? String(row[22]).trim().toUpperCase() : "TRUE";
-        const isLocked = ["TRUE", "LOCKED", "YES", "1"].includes(lockVal);
-
-        return {
-          registrationDateTime: row[0] || "",
-          driverName: row[1] || "",
-          mobileNumber: row[2] || "",
-          etmId: row[3] || "",
-          aadhaarNumber: row[4] || "",
-          panNumber: row[5] || "",
-          dlNumber: row[6] || "",
-          address: row[7] || "",
-          dob: row[8] || "",
-          emergencyContact: row[9] || "",
-          vehicleNumber: row[10] || "",
-          vehicleModel: row[11] || "",
-          profilePhotoUrl: row[12] || "",
-          aadhaarFrontUrl: row[13] || "",
-          aadhaarBackUrl: row[14] || "",
-          panCardUrl: row[15] || "",
-          dlFrontUrl: row[16] || "",
-          dlBackUrl: row[17] || "",
-          bankPassbookUrl: row[18] || "",
-          policeVerificationUrl: row[19] || "",
-          status: row[20] || "Submitted",
-          lastUpdated: row[21] || "",
-          isLocked: isLocked
-        };
+        if ((searchEtm && cellEtm === searchEtm) || (searchMobile && cellMobile === searchMobile) || cellEtm === searchNorm || cellMobile === searchNorm) {
+          return {
+            registrationDateTime: row[0] || "",
+            driverName: row[1] || "",
+            mobileNumber: row[2] || "",
+            etmId: row[3] || "",
+            aadhaarNumber: row[4] || "",
+            panNumber: row[5] || "",
+            dlNumber: row[6] || "",
+            address: row[7] || "",
+            dob: row[8] || "",
+            emergencyContact: row[9] || "",
+            vehicleNumber: row[10] || "",
+            vehicleModel: row[11] || "",
+            profilePhotoUrl: row[12] || "",
+            aadhaarFrontUrl: row[13] || "",
+            aadhaarBackUrl: row[14] || "",
+            panCardUrl: row[15] || "",
+            dlFrontUrl: row[16] || "",
+            dlBackUrl: row[17] || "",
+            bankPassbookUrl: row[18] || "",
+            policeVerificationUrl: row[19] || "",
+            status: row[20] || "Pending",
+            lastUpdated: row[21] || "",
+            isLocked: false
+          };
+        }
       }
     }
   } catch (err) {

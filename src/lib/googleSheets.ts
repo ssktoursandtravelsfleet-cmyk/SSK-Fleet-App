@@ -731,6 +731,22 @@ function findDriverRowIndex(
   const targetRawId = rawId ? norm(rawId) : "";
   const targetDriverId = driverId ? norm(driverId) : "";
   const targetEtm = cleanEtm ? norm(cleanEtm) : "";
+  const targetMobile = cleanMobile ? cleanMobile.replace(/\D/g, "").slice(-10) : "";
+
+  // Priority 0: BOTH ETM ID and Mobile Number (Strict Match for Documents_Verification)
+  if (targetEtm && targetMobile) {
+    for (let i = 1; i < rows.length; i++) {
+      const r = rows[i];
+      if (!r) continue;
+      const rEtmRaw = String(r[1] || "").trim().toUpperCase();
+      const rEtmNorm = norm(rEtmRaw);
+      const rMobileRaw = String(r[3] || "").replace(/\D/g, "").slice(-10);
+
+      if ((rEtmRaw === cleanEtm || rEtmNorm === targetEtm) && rMobileRaw === targetMobile) {
+        return { index: i, matchedBy: "ETM + Mobile", matchedId: String(r[0] || ""), matchedEtm: rEtmRaw };
+      }
+    }
+  }
 
   // Priority 1: Driver ID (Col A / index 0)
   if (targetRawId || targetDriverId) {
@@ -865,13 +881,15 @@ export async function syncApprovedDriver(
     }
 
     const matchedRowNumber = matchedIdx + 1;
-    const range = `${sheetToUpdate}!I${matchedRowNumber}:L${matchedRowNumber}`;
+    const range = sheetToUpdate === "Documents_Verification"
+      ? `Documents_Verification!M${matchedRowNumber}:P${matchedRowNumber}`
+      : `${sheetToUpdate}!I${matchedRowNumber}:L${matchedRowNumber}`;
 
     // Required Console Logs
     console.log("Matched row:", matchedRowNumber);
     console.log("Google Sheets Range:", range);
 
-    // Update ONLY Columns I, J, K, L (index 8, 9, 10, 11)
+    // Update Columns
     const updateValues = [["Approved", adminName, dateTimeStr, "Approved"]];
     console.log("Values being written:", updateValues);
 
@@ -980,13 +998,15 @@ export async function syncRejectedDriver(
     }
 
     const matchedRowNumber = matchedIdx + 1;
-    const range = `${sheetToUpdate}!I${matchedRowNumber}:L${matchedRowNumber}`;
+    const range = sheetToUpdate === "Documents_Verification"
+      ? `Documents_Verification!M${matchedRowNumber}:P${matchedRowNumber}`
+      : `${sheetToUpdate}!I${matchedRowNumber}:L${matchedRowNumber}`;
 
     // Required Console Logs
     console.log("Matched row:", matchedRowNumber);
     console.log("Google Sheets Range:", range);
 
-    // Update ONLY Columns I, J, K, L (index 8, 9, 10, 11)
+    // Update Columns
     const updateValues = [["Rejected", adminName, dateTimeStr, reason || "Rejected"]];
     console.log("Values being written:", updateValues);
 
