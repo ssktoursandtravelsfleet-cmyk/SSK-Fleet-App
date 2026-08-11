@@ -50,7 +50,7 @@ export default function AdminHeader({
   };
 
   return (
-    <header className="sticky top-0 z-30 bg-[#0D47A1] text-white shadow-md border-b border-blue-900 px-4 py-3 flex items-center justify-between">
+    <header className="sticky top-0 z-30 bg-[#0D47A1] text-white shadow-md border-b border-blue-900 px-4 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] pb-3 flex items-center justify-between">
       <div className="flex items-center gap-3">
         <button
           onClick={onOpenDrawer}
@@ -61,7 +61,7 @@ export default function AdminHeader({
         </button>
 
         <div className="flex items-center gap-2">
-          <SSKLogo className="w-7 h-7 shrink-0 drop-shadow-md" />
+          <SSKLogo className="w-7 h-7 shrink-0" />
           <div>
             <h1 className="font-extrabold text-sm sm:text-base tracking-tight leading-none text-white">
               {titleOverride || getScreenTitle(activeScreen)}

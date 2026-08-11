@@ -16,6 +16,13 @@
 }
 
 /* Base resets or utility classes if needed */
+:root {
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+}
+
 body {
   font-family: var(--font-sans);
   background-color: #F5F7FA;
@@ -24,6 +31,8 @@ body {
   padding: 0;
   overflow-x: hidden;
   transition: background-color 0.2s ease, color 0.2s ease;
+  padding-left: var(--sal);
+  padding-right: var(--sar);
 }
 
 .dark body {

@@ -19,11 +19,8 @@ export default function SplashScreen({ onComplete }: SplashScreenProps) {
       initial={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.6, ease: "easeInOut" }}
-      className="flex-1 flex flex-col items-center justify-between p-8 bg-[#08182D] text-white relative overflow-hidden select-none"
+      className="flex-1 flex flex-col items-center justify-between p-8 pt-[max(2rem,env(safe-area-inset-top,0px))] pb-[max(2rem,env(safe-area-inset-bottom,0px))] bg-[#08182D] text-white relative overflow-hidden select-none min-h-screen"
     >
-      {/* Subtle ambient light source inside dark background */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-64 h-64 bg-[#D5A144]/5 blur-3xl rounded-full pointer-events-none" />
-
       {/* Spacer top */}
       <div />
 
@@ -38,21 +35,8 @@ export default function SplashScreen({ onComplete }: SplashScreenProps) {
             damping: 15,
             delay: 0.2
           }}
-          className="relative mb-6"
+          className="relative mb-6 flex items-center justify-center"
         >
-          {/* Outer glowing halo */}
-          <motion.div
-            animate={{
-              scale: [1, 1.05, 1],
-              opacity: [0.3, 0.6, 0.3],
-            }}
-            transition={{
-              duration: 3,
-              repeat: Infinity,
-              ease: "easeInOut"
-            }}
-            className="absolute -inset-4 bg-[#D5A144]/15 rounded-full blur-xl pointer-events-none"
-          />
           <SSKLogo size={220} className="relative z-10" />
         </motion.div>
 

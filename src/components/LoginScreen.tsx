@@ -188,10 +188,10 @@ export default function LoginScreen({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -15 }}
       transition={{ duration: 0.4 }}
-      className="flex-1 flex flex-col justify-between p-5 bg-[#F5F7FA] text-[#333333] overflow-y-auto no-scrollbar relative"
+      className="flex-1 flex flex-col justify-between p-5 pt-[calc(1.25rem+env(safe-area-inset-top,0px))] pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] bg-[#F5F7FA] text-[#333333] overflow-y-auto no-scrollbar relative min-h-screen"
     >
       {/* Top Header / Logo Section */}
-      <div className="flex flex-col items-center justify-center pt-6 pb-2">
+      <div className="flex flex-col items-center justify-center pt-2 pb-2">
         <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}

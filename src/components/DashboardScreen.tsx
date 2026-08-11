@@ -147,7 +147,7 @@ export default function DashboardScreen({
     <div className="flex-1 flex flex-col bg-[#F5F7FA] dark:bg-slate-950 relative overflow-hidden text-[#333333] dark:text-slate-100 transition-colors duration-200">
       
       {/* 1. Header Profile & Online Toggle */}
-      <div className="bg-[#0D47A1] dark:bg-slate-900 text-white px-5 sm:px-8 pt-5 pb-6 lg:rounded-3xl shadow-md shrink-0 relative border-b border-white/10 lg:m-6 lg:mb-2">
+      <div className="bg-[#0D47A1] dark:bg-slate-900 text-white px-5 sm:px-8 pt-[calc(1.25rem+env(safe-area-inset-top,0px))] pb-6 lg:rounded-3xl shadow-md shrink-0 relative border-b border-white/10 lg:m-6 lg:mb-2">
         <div className="flex justify-between items-center max-w-7xl mx-auto">
           <div className="flex items-center gap-2">
             <button

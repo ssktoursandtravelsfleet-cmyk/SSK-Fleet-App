@@ -296,7 +296,7 @@ export default function OnboardingScreen({
       )}
 
       {/* Header Bar */}
-      <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-[#0C1E35] sticky top-0 z-40 shrink-0">
+      <div className="px-4 pt-[calc(1rem+env(safe-area-inset-top,0px))] pb-4 border-b border-slate-800 flex items-center justify-between bg-[#0C1E35] sticky top-0 z-40 shrink-0">
         <button
           onClick={() => {
             if (currentStep === "bank_police") setCurrentStep("dl_vehicle");

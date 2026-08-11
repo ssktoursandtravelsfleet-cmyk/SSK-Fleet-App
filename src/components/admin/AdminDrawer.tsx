@@ -128,7 +128,7 @@ export default function AdminDrawer({
         <div className="p-4 bg-[#0A3880] flex items-center justify-between border-b border-blue-800 shrink-0 h-16">
           {!isCollapsed ? (
             <div className="flex items-center gap-3 overflow-hidden">
-              <SSKLogo className="w-9 h-9 shrink-0 drop-shadow-md" />
+              <SSKLogo className="w-9 h-9 shrink-0" />
               <div className="min-w-0">
                 <h3 className="font-extrabold text-xs leading-tight text-white truncate">{adminName}</h3>
                 <p className="text-[10px] text-blue-200 font-medium truncate">{adminMobile}</p>
@@ -136,7 +136,7 @@ export default function AdminDrawer({
             </div>
           ) : (
             <div className="w-full flex justify-center">
-              <SSKLogo className="w-9 h-9 shrink-0 drop-shadow-md" />
+              <SSKLogo className="w-9 h-9 shrink-0" />
             </div>
           )}
           <button
@@ -226,9 +226,9 @@ export default function AdminDrawer({
               className="fixed top-0 left-0 bottom-0 w-72 bg-[#0D47A1] text-white z-50 flex flex-col shadow-2xl overflow-hidden"
             >
               {/* Header */}
-              <div className="p-4 bg-[#0A3880] flex items-center justify-between border-b border-blue-800">
+              <div className="px-4 pt-[calc(1rem+env(safe-area-inset-top,0px))] pb-4 bg-[#0A3880] flex items-center justify-between border-b border-blue-800">
                 <div className="flex items-center gap-3">
-                  <SSKLogo className="w-10 h-10 shrink-0 drop-shadow-md" />
+                  <SSKLogo className="w-10 h-10 shrink-0" />
                   <div>
                     <h3 className="font-bold text-sm leading-tight text-white">{adminName}</h3>
                     <p className="text-[10px] text-blue-200 font-medium">{adminMobile}</p>

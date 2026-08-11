@@ -1315,10 +1315,10 @@ export default function App() {
         {pushNotification && (
           <motion.div
             initial={{ y: -100, opacity: 0, scale: 0.95 }}
-            animate={{ y: 12, opacity: 1, scale: 1 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: -100, opacity: 0, scale: 0.95 }}
             transition={{ type: "spring", stiffness: 220, damping: 20 }}
-            className="absolute top-0 left-4 right-4 z-[9999] bg-[#0C1E35]/95 backdrop-blur-md text-white px-4 py-3.5 rounded-2xl shadow-2xl border border-slate-700/50 flex items-start gap-3 cursor-pointer select-none"
+            className="absolute top-[calc(0.75rem+env(safe-area-inset-top,0px))] left-4 right-4 z-[9999] bg-[#0C1E35]/95 backdrop-blur-md text-white px-4 py-3.5 rounded-2xl shadow-2xl border border-slate-700/50 flex items-start gap-3 cursor-pointer select-none"
             onClick={() => {
               const msg = (pushNotification.message || "").toLowerCase();
               const title = (pushNotification.title || "").toLowerCase();
@@ -1333,7 +1333,7 @@ export default function App() {
             }}
           >
             {/* Round Mini SSK Logo Icon */}
-            <SSKLogo className="w-9 h-9 shrink-0 drop-shadow-md" />
+            <SSKLogo className="w-9 h-9 shrink-0" />
             
             {/* Notification Text Detail */}
             <div className="flex-1 min-w-0">
@@ -1380,7 +1380,7 @@ export default function App() {
             <div className="p-4 bg-[#0D47A1] text-white flex items-center justify-between border-b border-blue-900 shrink-0 h-16">
               {!isDriverSidebarCollapsed ? (
                 <div className="flex items-center gap-3 overflow-hidden">
-                  <SSKLogo className="w-9 h-9 shrink-0 drop-shadow-md" />
+                  <SSKLogo className="w-9 h-9 shrink-0" />
                   <div className="min-w-0">
                     <h3 className="font-extrabold text-xs text-white truncate">SSK Fleet</h3>
                     <p className="text-[10px] text-blue-200 font-bold uppercase tracking-wider truncate">Driver Portal</p>
@@ -1388,7 +1388,7 @@ export default function App() {
                 </div>
               ) : (
                 <div className="w-full flex justify-center">
-                  <SSKLogo className="w-9 h-9 shrink-0 drop-shadow-md" />
+                  <SSKLogo className="w-9 h-9 shrink-0" />
                 </div>
               )}
               <button
@@ -1537,7 +1537,7 @@ export default function App() {
               id="drawer-menu"
             >
               {/* Drawer Header with Profile Summary */}
-              <div className="p-5 bg-[#0D47A1] text-white border-b border-slate-800/50 flex items-center gap-3.5" id="drawer-header-profile">
+              <div className="px-5 pt-[calc(1.25rem+env(safe-area-inset-top,0px))] pb-5 bg-[#0D47A1] text-white border-b border-slate-800/50 flex items-center gap-3.5" id="drawer-header-profile">
                 {/* Profile Photo / Avatar */}
                 <div className="w-12 h-12 rounded-full bg-white/10 border border-white/20 flex items-center justify-center overflow-hidden shrink-0 shadow-md">
                   {drawerProfilePhoto ? (
@@ -1632,7 +1632,7 @@ export default function App() {
               </div>
 
               {/* Drawer Footer with Logout button */}
-              <div className="p-4 border-t border-slate-800/60 space-y-2">
+              <div className="px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] border-t border-slate-800/60 space-y-2">
                 <button
                   onClick={() => {
                     setIsDrawerOpen(false);

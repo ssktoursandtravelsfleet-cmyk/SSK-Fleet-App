@@ -21,7 +21,14 @@ export default function SSKLogo({ className = "", size }: SSKLogoProps) {
       referrerPolicy="no-referrer"
       onError={() => setHasError(true)}
       className={`object-contain mx-auto ${className}`}
-      style={size ? { width: size, height: "auto", maxWidth: "100%" } : undefined}
+      style={{
+        ...(size ? { width: size, height: "auto" } : {}),
+        maxWidth: "100%",
+        display: "block",
+        filter: "none",
+        mixBlendMode: "normal",
+        opacity: 1,
+      }}
     />
   );
 }

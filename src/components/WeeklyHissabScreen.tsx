@@ -345,7 +345,7 @@ export default function WeeklyHissabScreen({
   return (
     <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-950 text-[#333333] dark:text-slate-100 overflow-y-auto transition-colors duration-200" id="weekly-hissab-screen">
       {/* Top Header */}
-      <div className="sticky top-0 bg-[#08182D] text-white px-5 py-4 flex items-center gap-4 z-10 shadow-md border-b border-slate-800">
+      <div className="sticky top-0 bg-[#08182D] text-white px-5 pt-[calc(1rem+env(safe-area-inset-top,0px))] pb-4 flex items-center gap-4 z-10 shadow-md border-b border-slate-800">
         <button 
           onClick={onBackToDashboard}
           className="p-1.5 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
