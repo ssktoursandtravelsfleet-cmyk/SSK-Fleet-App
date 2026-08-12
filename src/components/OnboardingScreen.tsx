@@ -3,22 +3,18 @@ import { motion, AnimatePresence } from "motion/react";
 import { 
   User, 
   FileText, 
-  UploadCloud, 
+  CreditCard, 
   MapPin, 
   CheckCircle, 
   AlertCircle, 
   ArrowLeft, 
   ArrowRight, 
   Check, 
-  CreditCard, 
   Camera, 
   Loader2, 
   Lock, 
-  ShieldCheck, 
-  PhoneCall, 
-  Car, 
   Eye, 
-  Image as ImageIcon 
+  UploadCloud 
 } from "lucide-react";
 import { DriverDocumentRecord } from "../types";
 
@@ -50,12 +46,12 @@ interface OnboardingScreenProps {
       bankPhoto: string;
       policePhoto: string;
     };
-  }) => Promise<void>;
+  }) => Promise<{ success: boolean; message: string }>;
   onBackToLogin: () => void;
   isSubmitting: boolean;
 }
 
-type OnboardingStep = "personal" | "identity" | "dl_vehicle" | "bank_police";
+type OnboardingStep = "profile" | "aadhaar" | "pan" | "driving_licence" | "address_proof";
 
 export default function OnboardingScreen({
   initialPhone,
@@ -67,38 +63,39 @@ export default function OnboardingScreen({
 }: OnboardingScreenProps) {
   const isLocked = existingDocRecord?.isLocked === true;
 
-  const [currentStep, setCurrentStep] = useState<OnboardingStep>("personal");
+  const [currentStep, setCurrentStep] = useState<OnboardingStep>("profile");
   const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
   const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null);
 
-  // Personal Info State
-  const [name, setName] = useState(existingDocRecord?.driverName || "");
-  const [phone, setPhone] = useState(existingDocRecord?.mobileNumber || initialPhone || "");
-  const [etmId, setEtmId] = useState(existingDocRecord?.etmId || initialEtm || "");
-  const [email, setEmail] = useState("");
+  // STEP 1 — PROFILE PHOTO
   const [selfie, setSelfie] = useState<string | null>(existingDocRecord?.profilePhotoUrl || null);
 
-  // Identity State (Aadhaar, PAN, DOB)
+  // STEP 2 — AADHAAR CARD
   const [aadhaarNo, setAadhaarNo] = useState(existingDocRecord?.aadhaarNumber || "");
   const [aadhaarPhoto, setAadhaarPhoto] = useState<string | null>(existingDocRecord?.aadhaarFrontUrl || null);
   const [aadhaarBackPhoto, setAadhaarBackPhoto] = useState<string | null>(existingDocRecord?.aadhaarBackUrl || null);
+
+  // STEP 3 — PAN CARD
   const [panNo, setPanNo] = useState(existingDocRecord?.panNumber || "");
   const [panPhoto, setPanPhoto] = useState<string | null>(existingDocRecord?.panCardUrl || null);
-  const [dob, setDob] = useState(existingDocRecord?.dob || "");
 
-  // DL & Vehicle State
+  // STEP 4 — DRIVING LICENCE
   const [dlNo, setDlNo] = useState(existingDocRecord?.dlNumber || "");
   const [dlPhoto, setDlPhoto] = useState<string | null>(existingDocRecord?.dlFrontUrl || null);
   const [dlBackPhoto, setDlBackPhoto] = useState<string | null>(existingDocRecord?.dlBackUrl || null);
-  const [emergencyContact, setEmergencyContact] = useState(existingDocRecord?.emergencyContact || "");
-  const [vehicleNo, setVehicleNo] = useState(existingDocRecord?.vehicleNumber || "");
-  const [vehicleModel, setVehicleModel] = useState(existingDocRecord?.vehicleModel || "");
 
-  // Address, Bank & Police Verification
+  // STEP 5 — ADDRESS PROOF
   const [addressText, setAddressText] = useState(existingDocRecord?.address || "");
   const [addressPhoto, setAddressPhoto] = useState<string | null>(existingDocRecord?.bankPassbookUrl || null);
-  const [bankPhoto, setBankPhoto] = useState<string | null>(existingDocRecord?.bankPassbookUrl || null);
-  const [policePhoto, setPolicePhoto] = useState<string | null>(existingDocRecord?.policeVerificationUrl || null);
+
+  const stepsList: { id: OnboardingStep; stepNumber: number; title: string; label: string; icon: any }[] = [
+    { id: "profile", stepNumber: 1, title: "STEP 1 — PROFILE PHOTO", label: "Profile Photo", icon: User },
+    { id: "aadhaar", stepNumber: 2, title: "STEP 2 — AADHAAR CARD", label: "Aadhaar Card", icon: CreditCard },
+    { id: "pan", stepNumber: 3, title: "STEP 3 — PAN CARD", label: "PAN Card", icon: CreditCard },
+    { id: "driving_licence", stepNumber: 4, title: "STEP 4 — DRIVING LICENCE", label: "Driving Licence", icon: FileText },
+    { id: "address_proof", stepNumber: 5, title: "STEP 5 — ADDRESS PROOF", label: "Address Proof", icon: MapPin }
+  ];
 
   const handleImageUpload = (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -110,8 +107,8 @@ export default function OnboardingScreen({
     }
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        setError("File size should be less than 5MB");
+      if (file.size > 8 * 1024 * 1024) {
+        setError("File size should be less than 8MB");
         return;
       }
       const reader = new FileReader();
@@ -121,48 +118,6 @@ export default function OnboardingScreen({
       };
       reader.readAsDataURL(file);
     }
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
-
-  const handleDrop = (
-    e: React.DragEvent,
-    setter: (val: string | null) => void
-  ) => {
-    e.preventDefault();
-    if (isLocked) {
-      setError("Your documents have already been submitted successfully. To update any document, please contact the Admin.");
-      return;
-    }
-    const file = e.dataTransfer.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        setError("File size should be less than 5MB");
-        return;
-      }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setter(reader.result as string);
-        setError("");
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const triggerCameraEmulation = (setter: (val: string | null) => void) => {
-    if (isLocked) {
-      setError("Your documents have already been submitted successfully. To update any document, please contact the Admin.");
-      return;
-    }
-    const mockAvatars = [
-      "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80",
-      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&auto=format&fit=crop&q=80"
-    ];
-    const chosen = mockAvatars[Math.floor(Math.random() * mockAvatars.length)];
-    setter(chosen);
-    setError("");
   };
 
   const handleAadhaarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -179,48 +134,67 @@ export default function OnboardingScreen({
     }
   };
 
+  const checkStepValidation = (step: OnboardingStep): string | null => {
+    if (step === "profile") {
+      if (!selfie) return "Profile photo is required. Please upload or capture a profile photo.";
+    } else if (step === "aadhaar") {
+      const plainAadhaar = aadhaarNo.replace(/\s/g, "");
+      if (!plainAadhaar || plainAadhaar.length !== 12) return "Aadhaar Card Number is required (12 digits).";
+      if (!aadhaarPhoto) return "Aadhaar Front Photo is required.";
+      if (!aadhaarBackPhoto) return "Aadhaar Back Photo is required.";
+    } else if (step === "pan") {
+      if (!panNo.trim() || panNo.trim().length < 10) return "PAN Card Number is required (10 characters).";
+      if (!panPhoto) return "PAN Card Photo is required.";
+    } else if (step === "driving_licence") {
+      if (!dlNo.trim() || dlNo.trim().length < 6) return "Driving Licence Number is required.";
+      if (!dlPhoto) return "Driving Licence Front Photo is required.";
+      if (!dlBackPhoto) return "Driving Licence Back Photo is required.";
+    } else if (step === "address_proof") {
+      if (!addressText.trim()) return "Address Proof text/address field is required.";
+      if (!addressPhoto) return "Address Proof Photo is required.";
+    }
+    return null;
+  };
+
   const validateAndNext = () => {
     setError("");
-    if (currentStep === "personal") {
-      if (!name.trim()) {
-        setError("Full Name is required");
-        return;
-      }
-      if (!phone || phone.length < 10) {
-        setError("Please enter a valid 10-digit phone number");
-        return;
-      }
-      if (!selfie) {
-        setError("Please upload or capture a profile photo");
-        return;
-      }
-      setCurrentStep("identity");
-    } else if (currentStep === "identity") {
-      const plainAadhaar = aadhaarNo.replace(/\s/g, "");
-      if (plainAadhaar.length !== 12) {
-        setError("Aadhaar Number must be exactly 12 digits");
-        return;
-      }
-      if (!aadhaarPhoto) {
-        setError("Please upload Aadhaar Front Copy");
-        return;
-      }
-      if (!panNo.trim() || panNo.trim().length < 10) {
-        setError("Please enter a valid 10-character PAN Card number");
-        return;
-      }
-      setCurrentStep("dl_vehicle");
-    } else if (currentStep === "dl_vehicle") {
-      if (dlNo.trim().length < 6) {
-        setError("Please enter a valid Driving License number");
-        return;
-      }
-      if (!dlPhoto) {
-        setError("Please upload Driving License Front Photo");
-        return;
-      }
-      setCurrentStep("bank_police");
+    setSuccessMessage("");
+
+    const currentErr = checkStepValidation(currentStep);
+    if (currentErr) {
+      setError(currentErr);
+      return;
     }
+
+    if (currentStep === "profile") setCurrentStep("aadhaar");
+    else if (currentStep === "aadhaar") setCurrentStep("pan");
+    else if (currentStep === "pan") setCurrentStep("driving_licence");
+    else if (currentStep === "driving_licence") setCurrentStep("address_proof");
+  };
+
+  const handleStepClick = (targetStep: OnboardingStep) => {
+    setError("");
+    setSuccessMessage("");
+    const stepsSequence: OnboardingStep[] = ["profile", "aadhaar", "pan", "driving_licence", "address_proof"];
+    const targetIdx = stepsSequence.indexOf(targetStep);
+    const currentIdx = stepsSequence.indexOf(currentStep);
+
+    if (targetIdx <= currentIdx) {
+      setCurrentStep(targetStep);
+      return;
+    }
+
+    // Check all preceding steps before jumping forward
+    for (let i = 0; i < targetIdx; i++) {
+      const stepValErr = checkStepValidation(stepsSequence[i]);
+      if (stepValErr) {
+        setError(stepValErr);
+        setCurrentStep(stepsSequence[i]);
+        return;
+      }
+    }
+
+    setCurrentStep(targetStep);
   };
 
   const handleSubmitForm = async () => {
@@ -229,24 +203,32 @@ export default function OnboardingScreen({
       return;
     }
     setError("");
-    if (!addressText.trim()) {
-      setError("Please write full residential address");
-      return;
+    setSuccessMessage("");
+
+    // Validate all 5 steps
+    const stepsSequence: OnboardingStep[] = ["profile", "aadhaar", "pan", "driving_licence", "address_proof"];
+    for (const step of stepsSequence) {
+      const stepErr = checkStepValidation(step);
+      if (stepErr) {
+        setError(stepErr);
+        setCurrentStep(step);
+        return;
+      }
     }
 
-    await onComplete({
-      name,
-      phone,
-      email,
-      etmId,
+    const response = await onComplete({
+      name: existingDocRecord?.driverName || "Driver",
+      phone: initialPhone || existingDocRecord?.mobileNumber || "",
+      email: "",
+      etmId: initialEtm || existingDocRecord?.etmId || "",
       aadhaarNo: aadhaarNo.replace(/\s/g, ""),
       panNo: panNo.toUpperCase().trim(),
       dlNo: dlNo.toUpperCase().trim(),
-      dob,
-      emergencyContact,
-      vehicleNo: vehicleNo.toUpperCase().trim(),
-      vehicleModel,
-      addressText,
+      dob: "",
+      emergencyContact: "",
+      vehicleNo: "",
+      vehicleModel: "",
+      addressText: addressText.trim(),
       documents: {
         selfie: selfie || "",
         aadhaarPhoto: aadhaarPhoto || "",
@@ -255,18 +237,19 @@ export default function OnboardingScreen({
         dlPhoto: dlPhoto || "",
         dlBackPhoto: dlBackPhoto || "",
         addressPhoto: addressPhoto || "",
-        bankPhoto: bankPhoto || "",
-        policePhoto: policePhoto || ""
+        bankPhoto: "",
+        policePhoto: ""
       }
     });
+
+    if (response.success) {
+      setSuccessMessage(response.message || "Documents submitted successfully. Verification status: Pending.");
+    } else {
+      setError(response.message || "Document upload failed. Your documents were not saved. Please try again.");
+    }
   };
 
-  const stepsList = [
-    { id: "personal", label: "Profile", icon: User },
-    { id: "identity", label: "Identity", icon: CreditCard },
-    { id: "dl_vehicle", label: "DL & Vehicle", icon: FileText },
-    { id: "bank_police", label: "Address & Bank", icon: MapPin }
-  ];
+  const activeStepObj = stepsList.find(s => s.id === currentStep);
 
   return (
     <motion.div
@@ -299,9 +282,10 @@ export default function OnboardingScreen({
       <div className="px-4 pt-[calc(1rem+env(safe-area-inset-top,0px))] pb-4 border-b border-slate-800 flex items-center justify-between bg-[#0C1E35] sticky top-0 z-40 shrink-0">
         <button
           onClick={() => {
-            if (currentStep === "bank_police") setCurrentStep("dl_vehicle");
-            else if (currentStep === "dl_vehicle") setCurrentStep("identity");
-            else if (currentStep === "identity") setCurrentStep("personal");
+            if (currentStep === "address_proof") setCurrentStep("driving_licence");
+            else if (currentStep === "driving_licence") setCurrentStep("pan");
+            else if (currentStep === "pan") setCurrentStep("aadhaar");
+            else if (currentStep === "aadhaar") setCurrentStep("profile");
             else onBackToLogin();
           }}
           disabled={isSubmitting}
@@ -311,42 +295,44 @@ export default function OnboardingScreen({
         </button>
         <div className="text-center flex-1 pr-6">
           <h2 className="text-sm font-black tracking-widest text-[#D5A144] uppercase font-sans">
-            SSK Driver Onboarding
+            New Driver Onboarding
           </h2>
           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
-            Step {stepsList.findIndex(s => s.id === currentStep) + 1} of 4: {stepsList.find(s => s.id === currentStep)?.label}
+            {activeStepObj?.title} ({activeStepObj?.stepNumber} of 5)
           </p>
         </div>
       </div>
 
-      {/* Step Tracker */}
-      <div className="px-5 py-3.5 bg-[#0A1A2E] border-b border-slate-800/80 flex justify-between items-center shrink-0">
+      {/* Step Tracker (1 to 5) */}
+      <div className="px-4 py-3 bg-[#0A1A2E] border-b border-slate-800/80 flex justify-between items-center shrink-0 overflow-x-auto no-scrollbar">
         {stepsList.map((st, sIdx) => {
-          const StepIcon = st.icon;
           const isCompleted = stepsList.findIndex(s => s.id === currentStep) > sIdx;
           const isActive = currentStep === st.id;
 
           return (
             <React.Fragment key={st.id}>
               <div
-                onClick={() => setCurrentStep(st.id as OnboardingStep)}
-                className="flex flex-col items-center relative cursor-pointer"
+                onClick={() => handleStepClick(st.id)}
+                className="flex flex-col items-center relative cursor-pointer shrink-0"
               >
                 <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300 ${
+                  className={`w-7 h-7 rounded-full flex items-center justify-center transition-all duration-300 text-xs font-bold ${
                     isCompleted
                       ? "bg-[#00C853] text-white shadow-sm"
                       : isActive
-                      ? "bg-[#D5A144] text-[#08182D] font-bold ring-4 ring-[#D5A144]/25 shadow-lg"
+                      ? "bg-[#D5A144] text-[#08182D] font-black ring-4 ring-[#D5A144]/25 shadow-lg"
                       : "bg-slate-800 text-slate-400 border border-slate-700"
                   }`}
                 >
-                  {isCompleted ? <Check className="w-4.5 h-4.5 stroke-[3]" /> : <StepIcon className="w-4 h-4" />}
+                  {isCompleted ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : st.stepNumber}
                 </div>
+                <span className={`text-[9px] font-bold mt-1 tracking-tight ${isActive ? "text-amber-300" : "text-slate-500"}`}>
+                  Step {st.stepNumber}
+                </span>
               </div>
               {sIdx < stepsList.length - 1 && (
                 <div
-                  className={`flex-1 h-0.5 mx-2 rounded-full transition-all duration-500 ${
+                  className={`flex-1 h-0.5 min-w-[12px] mx-1 rounded-full transition-all duration-500 ${
                     stepsList.findIndex(s => s.id === currentStep) > sIdx
                       ? "bg-[#00C853]"
                       : "bg-slate-800"
@@ -358,7 +344,7 @@ export default function OnboardingScreen({
         })}
       </div>
 
-      {/* Error Banner */}
+      {/* Notifications / Errors */}
       <AnimatePresence>
         {error && (
           <motion.div
@@ -371,102 +357,71 @@ export default function OnboardingScreen({
             <span className="text-[11px] font-bold leading-tight">{error}</span>
           </motion.div>
         )}
+        {successMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="mx-4 mt-3 p-3 bg-emerald-950/90 border border-emerald-800 text-emerald-200 rounded-xl flex items-start gap-2.5 shadow-md shrink-0"
+          >
+            <CheckCircle className="w-4.5 h-4.5 text-emerald-400 shrink-0 mt-0.5" />
+            <span className="text-[11px] font-bold leading-tight">{successMessage}</span>
+          </motion.div>
+        )}
       </AnimatePresence>
 
       {/* Main Content Form */}
       <div className="flex-1 p-5 overflow-y-auto">
         <AnimatePresence mode="wait">
-          {currentStep === "personal" && (
+          {/* STEP 1 — PROFILE PHOTO */}
+          {currentStep === "profile" && (
             <motion.div
-              key="personal"
+              key="profile"
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
               className="space-y-4"
             >
-              <div className="bg-[#0C1E35] p-4 rounded-2xl border border-slate-800">
-                <h3 className="text-xs font-bold text-amber-300 uppercase tracking-widest mb-1">
-                  Driver Personal Details
+              <div className="bg-[#0C1E35] p-5 rounded-2xl border border-slate-800">
+                <h3 className="text-xs font-black text-amber-300 uppercase tracking-widest mb-1 flex items-center justify-between">
+                  <span>STEP 1 — PROFILE PHOTO</span>
+                  {isLocked && <Lock className="w-3.5 h-3.5 text-amber-400" />}
                 </h3>
-                <p className="text-slate-400 text-[10px] font-medium leading-relaxed mb-4">
-                  Enter official driver information as registered with fleet administration.
+                <p className="text-slate-400 text-[11px] font-medium leading-relaxed mb-5">
+                  Upload a clear, front-facing profile photo of the driver for identification.
                 </p>
 
-                <div className="space-y-3.5">
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                      Driver Full Name *
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Enter full name"
-                      value={name}
-                      onChange={(e) => !isLocked && setName(e.target.value)}
-                      readOnly={isLocked}
-                      className={`w-full bg-[#08182D] border border-slate-700/60 rounded-xl py-2.5 px-3.5 text-xs font-semibold focus:outline-none focus:border-amber-400 ${isLocked ? "opacity-80 cursor-not-allowed" : ""}`}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                      Mobile Number *
-                    </label>
-                    <input
-                      type="tel"
-                      maxLength={10}
-                      value={phone}
-                      onChange={(e) => !isLocked && setPhone(e.target.value.replace(/\D/g, ""))}
-                      readOnly={isLocked || !!initialPhone}
-                      className="w-full bg-[#08182D] border border-slate-700/60 rounded-xl py-2.5 px-3.5 text-xs font-semibold opacity-80 cursor-not-allowed"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                      ETM ID
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. ETM-8820"
-                      value={etmId}
-                      onChange={(e) => !isLocked && setEtmId(e.target.value.toUpperCase())}
-                      readOnly={isLocked}
-                      className={`w-full bg-[#08182D] border border-slate-700/60 rounded-xl py-2.5 px-3.5 text-xs font-bold uppercase ${isLocked ? "opacity-80 cursor-not-allowed" : ""}`}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Profile Photo Upload */}
-              <div className="bg-[#0C1E35] p-4 rounded-2xl border border-slate-800">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-xs font-bold text-amber-300 uppercase tracking-widest">
-                    Driver Profile Photo *
-                  </h3>
-                  {isLocked && (
-                    <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
-                      <Lock className="w-3 h-3" /> Locked
-                    </span>
-                  )}
-                </div>
-
                 {selfie ? (
-                  <div className="relative w-36 h-36 mx-auto rounded-2xl overflow-hidden border-2 border-amber-400/40 shadow-lg group">
-                    <img src={selfie} alt="Profile Photo" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                    <button
-                      type="button"
-                      onClick={() => setPreviewImage({ url: selfie, title: "Driver Profile Photo" })}
-                      className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-bold gap-1 transition-opacity"
-                    >
-                      <Eye className="w-4 h-4" /> View
-                    </button>
+                  <div className="space-y-3">
+                    <div className="relative w-44 h-44 mx-auto rounded-2xl overflow-hidden border-2 border-amber-400/50 shadow-xl group">
+                      <img src={selfie} alt="Profile Photo" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                      <button
+                        type="button"
+                        onClick={() => setPreviewImage({ url: selfie, title: "Profile Photo" })}
+                        className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-bold gap-1.5 transition-opacity"
+                      >
+                        <Eye className="w-4 h-4" /> Preview Photo
+                      </button>
+                    </div>
+                    {!isLocked && (
+                      <div className="text-center">
+                        <label className="text-[10px] text-amber-400 font-bold uppercase tracking-wider underline cursor-pointer">
+                          Change Profile Photo
+                          <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, setSelfie)} />
+                        </label>
+                      </div>
+                    )}
                   </div>
                 ) : (
-                  <div className="border border-dashed border-slate-700 rounded-2xl p-5 flex flex-col items-center justify-center bg-[#08182D]/40">
-                    <Camera className="w-8 h-8 text-amber-300/80 mb-2" />
-                    <span className="text-xs font-bold text-slate-200">Upload Driver Photo</span>
-                    <label className="mt-3 bg-[#D5A144] text-[#08182D] text-[11px] font-black uppercase px-4 py-2 rounded-xl cursor-pointer">
-                      Browse
+                  <div className="border-2 border-dashed border-slate-700 rounded-2xl p-8 flex flex-col items-center justify-center bg-[#08182D]/60 hover:border-amber-400/50 transition-colors">
+                    <div className="w-16 h-16 rounded-full bg-amber-400/10 flex items-center justify-center text-amber-400 mb-3">
+                      <Camera className="w-8 h-8" />
+                    </div>
+                    <span className="text-xs font-bold text-slate-200 mb-1">Upload Profile Photo</span>
+                    <span className="text-[10px] text-slate-400 text-center mb-4 max-w-xs">JPG, PNG or WEBP up to 8MB. Ensure full face is clearly visible.</span>
+                    <label className="bg-gradient-to-r from-amber-400 to-[#D5A144] text-[#08182D] text-xs font-black uppercase px-5 py-2.5 rounded-xl cursor-pointer shadow-md hover:brightness-110 transition-all flex items-center gap-2">
+                      <UploadCloud className="w-4 h-4" />
+                      <span>Browse Photo</span>
                       <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, setSelfie)} disabled={isLocked} />
                     </label>
                   </div>
@@ -475,98 +430,72 @@ export default function OnboardingScreen({
             </motion.div>
           )}
 
-          {currentStep === "identity" && (
+          {/* STEP 2 — AADHAAR CARD */}
+          {currentStep === "aadhaar" && (
             <motion.div
-              key="identity"
+              key="aadhaar"
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
               className="space-y-4"
             >
-              <div className="bg-[#0C1E35] p-4 rounded-2xl border border-slate-800">
-                <h3 className="text-xs font-bold text-amber-300 uppercase tracking-widest mb-1">
-                  Aadhaar & PAN Details
+              <div className="bg-[#0C1E35] p-5 rounded-2xl border border-slate-800">
+                <h3 className="text-xs font-black text-amber-300 uppercase tracking-widest mb-1">
+                  STEP 2 — AADHAAR CARD
                 </h3>
+                <p className="text-slate-400 text-[11px] font-medium leading-relaxed mb-4">
+                  Provide your 12-digit Aadhaar Card Number and upload both Front and Back photos.
+                </p>
 
-                <div className="space-y-3.5">
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                      Aadhaar Card Number *
-                    </label>
-                    <input
-                      type="tel"
-                      maxLength={14}
-                      value={aadhaarNo}
-                      onChange={handleAadhaarChange}
-                      readOnly={isLocked}
-                      placeholder="0000 0000 0000"
-                      className={`w-full bg-[#08182D] border border-slate-700/60 rounded-xl py-2.5 px-3.5 text-xs font-bold tracking-widest ${isLocked ? "opacity-80 cursor-not-allowed" : ""}`}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                      PAN Card Number *
-                    </label>
-                    <input
-                      type="text"
-                      maxLength={10}
-                      value={panNo}
-                      onChange={(e) => !isLocked && setPanNo(e.target.value.toUpperCase())}
-                      readOnly={isLocked}
-                      placeholder="ABCDE1234F"
-                      className={`w-full bg-[#08182D] border border-slate-700/60 rounded-xl py-2.5 px-3.5 text-xs font-bold uppercase tracking-wider ${isLocked ? "opacity-80 cursor-not-allowed" : ""}`}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                      Date of Birth
-                    </label>
-                    <input
-                      type="date"
-                      value={dob}
-                      onChange={(e) => !isLocked && setDob(e.target.value)}
-                      readOnly={isLocked}
-                      className={`w-full bg-[#08182D] border border-slate-700/60 rounded-xl py-2.5 px-3.5 text-xs font-semibold ${isLocked ? "opacity-80 cursor-not-allowed" : ""}`}
-                    />
-                  </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                    Aadhaar Number *
+                  </label>
+                  <input
+                    type="tel"
+                    maxLength={14}
+                    value={aadhaarNo}
+                    onChange={handleAadhaarChange}
+                    readOnly={isLocked}
+                    placeholder="0000 0000 0000"
+                    className={`w-full bg-[#08182D] border border-slate-700/60 rounded-xl py-3 px-3.5 text-xs font-bold tracking-widest focus:outline-none focus:border-amber-400 ${isLocked ? "opacity-80 cursor-not-allowed" : ""}`}
+                  />
                 </div>
               </div>
 
-              {/* Document Images */}
+              {/* Aadhaar Photos */}
               <div className="grid grid-cols-2 gap-3">
-                {/* Aadhaar Front */}
-                <div className="bg-[#0C1E35] p-3 rounded-2xl border border-slate-800">
-                  <p className="text-[10px] font-bold text-amber-300 uppercase mb-2">Aadhaar Front *</p>
+                <div className="bg-[#0C1E35] p-3.5 rounded-2xl border border-slate-800">
+                  <p className="text-[10px] font-bold text-amber-300 uppercase mb-2">Aadhaar Front Photo *</p>
                   {aadhaarPhoto ? (
                     <div className="relative aspect-video rounded-xl overflow-hidden border border-slate-700 group">
                       <img src={aadhaarPhoto} alt="Aadhaar Front" className="w-full h-full object-cover" />
-                      <button onClick={() => setPreviewImage({ url: aadhaarPhoto, title: "Aadhaar Front" })} className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-xs font-bold">
-                        <Eye className="w-4 h-4" />
+                      <button onClick={() => setPreviewImage({ url: aadhaarPhoto, title: "Aadhaar Front" })} className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-xs font-bold gap-1">
+                        <Eye className="w-4 h-4" /> Preview
                       </button>
                     </div>
                   ) : (
-                    <label className="border border-dashed border-slate-700 rounded-xl p-4 flex flex-col items-center justify-center text-[10px] text-slate-400 cursor-pointer">
-                      <span>Upload Front</span>
+                    <label className="border border-dashed border-slate-700 rounded-xl p-4 flex flex-col items-center justify-center text-[10px] text-slate-400 cursor-pointer hover:border-amber-400/50">
+                      <UploadCloud className="w-5 h-5 text-amber-400 mb-1" />
+                      <span className="font-bold">Upload Front</span>
                       <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, setAadhaarPhoto)} disabled={isLocked} />
                     </label>
                   )}
                 </div>
 
-                {/* Aadhaar Back */}
-                <div className="bg-[#0C1E35] p-3 rounded-2xl border border-slate-800">
-                  <p className="text-[10px] font-bold text-amber-300 uppercase mb-2">Aadhaar Back</p>
+                <div className="bg-[#0C1E35] p-3.5 rounded-2xl border border-slate-800">
+                  <p className="text-[10px] font-bold text-amber-300 uppercase mb-2">Aadhaar Back Photo *</p>
                   {aadhaarBackPhoto ? (
                     <div className="relative aspect-video rounded-xl overflow-hidden border border-slate-700 group">
                       <img src={aadhaarBackPhoto} alt="Aadhaar Back" className="w-full h-full object-cover" />
-                      <button onClick={() => setPreviewImage({ url: aadhaarBackPhoto, title: "Aadhaar Back" })} className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-xs font-bold">
-                        <Eye className="w-4 h-4" />
+                      <button onClick={() => setPreviewImage({ url: aadhaarBackPhoto, title: "Aadhaar Back" })} className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-xs font-bold gap-1">
+                        <Eye className="w-4 h-4" /> Preview
                       </button>
                     </div>
                   ) : (
-                    <label className="border border-dashed border-slate-700 rounded-xl p-4 flex flex-col items-center justify-center text-[10px] text-slate-400 cursor-pointer">
-                      <span>Upload Back</span>
+                    <label className="border border-dashed border-slate-700 rounded-xl p-4 flex flex-col items-center justify-center text-[10px] text-slate-400 cursor-pointer hover:border-amber-400/50">
+                      <UploadCloud className="w-5 h-5 text-amber-400 mb-1" />
+                      <span className="font-bold">Upload Back</span>
                       <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, setAadhaarBackPhoto)} disabled={isLocked} />
                     </label>
                   )}
@@ -575,95 +504,125 @@ export default function OnboardingScreen({
             </motion.div>
           )}
 
-          {currentStep === "dl_vehicle" && (
+          {/* STEP 3 — PAN CARD */}
+          {currentStep === "pan" && (
             <motion.div
-              key="dl_vehicle"
+              key="pan"
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
               className="space-y-4"
             >
-              <div className="bg-[#0C1E35] p-4 rounded-2xl border border-slate-800">
-                <h3 className="text-xs font-bold text-amber-300 uppercase tracking-widest mb-1">
-                  Driving License & Vehicle
+              <div className="bg-[#0C1E35] p-5 rounded-2xl border border-slate-800">
+                <h3 className="text-xs font-black text-amber-300 uppercase tracking-widest mb-1">
+                  STEP 3 — PAN CARD
                 </h3>
+                <p className="text-slate-400 text-[11px] font-medium leading-relaxed mb-4">
+                  Enter your 10-character PAN Card Number and upload a clear photo of the PAN Card.
+                </p>
 
-                <div className="space-y-3.5">
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                      Driving License Number *
-                    </label>
-                    <input
-                      type="text"
-                      value={dlNo}
-                      onChange={(e) => !isLocked && setDlNo(e.target.value.toUpperCase())}
-                      readOnly={isLocked}
-                      placeholder="e.g. MH0220210084512"
-                      className={`w-full bg-[#08182D] border border-slate-700/60 rounded-xl py-2.5 px-3.5 text-xs font-bold uppercase ${isLocked ? "opacity-80 cursor-not-allowed" : ""}`}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                      Vehicle Number
-                    </label>
-                    <input
-                      type="text"
-                      value={vehicleNo}
-                      onChange={(e) => !isLocked && setVehicleNo(e.target.value.toUpperCase())}
-                      readOnly={isLocked}
-                      placeholder="e.g. MH02EZ9910"
-                      className={`w-full bg-[#08182D] border border-slate-700/60 rounded-xl py-2.5 px-3.5 text-xs font-bold uppercase ${isLocked ? "opacity-80 cursor-not-allowed" : ""}`}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                      Vehicle Model
-                    </label>
-                    <input
-                      type="text"
-                      value={vehicleModel}
-                      onChange={(e) => !isLocked && setVehicleModel(e.target.value)}
-                      readOnly={isLocked}
-                      placeholder="e.g. WagonR CNG / Tata Tigor EV"
-                      className={`w-full bg-[#08182D] border border-slate-700/60 rounded-xl py-2.5 px-3.5 text-xs font-semibold ${isLocked ? "opacity-80 cursor-not-allowed" : ""}`}
-                    />
-                  </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                    PAN Number *
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={10}
+                    value={panNo}
+                    onChange={(e) => !isLocked && setPanNo(e.target.value.toUpperCase())}
+                    readOnly={isLocked}
+                    placeholder="ABCDE1234F"
+                    className={`w-full bg-[#08182D] border border-slate-700/60 rounded-xl py-3 px-3.5 text-xs font-bold uppercase tracking-wider focus:outline-none focus:border-amber-400 ${isLocked ? "opacity-80 cursor-not-allowed" : ""}`}
+                  />
                 </div>
               </div>
 
-              {/* DL Images */}
+              {/* PAN Photo */}
+              <div className="bg-[#0C1E35] p-4 rounded-2xl border border-slate-800">
+                <p className="text-[10px] font-bold text-amber-300 uppercase mb-2">PAN Card Photo *</p>
+                {panPhoto ? (
+                  <div className="relative aspect-video max-w-sm mx-auto rounded-xl overflow-hidden border border-slate-700 group">
+                    <img src={panPhoto} alt="PAN Card" className="w-full h-full object-cover" />
+                    <button onClick={() => setPreviewImage({ url: panPhoto, title: "PAN Card Photo" })} className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-xs font-bold gap-1">
+                      <Eye className="w-4 h-4" /> Preview Photo
+                    </button>
+                  </div>
+                ) : (
+                  <label className="border border-dashed border-slate-700 rounded-xl p-6 flex flex-col items-center justify-center text-[10px] text-slate-400 cursor-pointer hover:border-amber-400/50">
+                    <UploadCloud className="w-6 h-6 text-amber-400 mb-1.5" />
+                    <span className="font-bold text-xs text-slate-200">Upload PAN Card Photo</span>
+                    <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, setPanPhoto)} disabled={isLocked} />
+                  </label>
+                )}
+              </div>
+            </motion.div>
+          )}
+
+          {/* STEP 4 — DRIVING LICENCE */}
+          {currentStep === "driving_licence" && (
+            <motion.div
+              key="driving_licence"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="space-y-4"
+            >
+              <div className="bg-[#0C1E35] p-5 rounded-2xl border border-slate-800">
+                <h3 className="text-xs font-black text-amber-300 uppercase tracking-widest mb-1">
+                  STEP 4 — DRIVING LICENCE
+                </h3>
+                <p className="text-slate-400 text-[11px] font-medium leading-relaxed mb-4">
+                  Enter your Driving Licence Number and upload Front and Back photos of the licence.
+                </p>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                    Driving Licence Number *
+                  </label>
+                  <input
+                    type="text"
+                    value={dlNo}
+                    onChange={(e) => !isLocked && setDlNo(e.target.value.toUpperCase())}
+                    readOnly={isLocked}
+                    placeholder="e.g. MH0220210084512"
+                    className={`w-full bg-[#08182D] border border-slate-700/60 rounded-xl py-3 px-3.5 text-xs font-bold uppercase focus:outline-none focus:border-amber-400 ${isLocked ? "opacity-80 cursor-not-allowed" : ""}`}
+                  />
+                </div>
+              </div>
+
+              {/* DL Photos */}
               <div className="grid grid-cols-2 gap-3">
-                <div className="bg-[#0C1E35] p-3 rounded-2xl border border-slate-800">
-                  <p className="text-[10px] font-bold text-amber-300 uppercase mb-2">DL Front *</p>
+                <div className="bg-[#0C1E35] p-3.5 rounded-2xl border border-slate-800">
+                  <p className="text-[10px] font-bold text-amber-300 uppercase mb-2">DL Front Photo *</p>
                   {dlPhoto ? (
                     <div className="relative aspect-video rounded-xl overflow-hidden border border-slate-700 group">
                       <img src={dlPhoto} alt="DL Front" className="w-full h-full object-cover" />
-                      <button onClick={() => setPreviewImage({ url: dlPhoto, title: "DL Front" })} className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-xs font-bold">
-                        <Eye className="w-4 h-4" />
+                      <button onClick={() => setPreviewImage({ url: dlPhoto, title: "Driving Licence Front" })} className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-xs font-bold gap-1">
+                        <Eye className="w-4 h-4" /> Preview
                       </button>
                     </div>
                   ) : (
-                    <label className="border border-dashed border-slate-700 rounded-xl p-4 flex flex-col items-center justify-center text-[10px] text-slate-400 cursor-pointer">
-                      <span>Upload Front</span>
+                    <label className="border border-dashed border-slate-700 rounded-xl p-4 flex flex-col items-center justify-center text-[10px] text-slate-400 cursor-pointer hover:border-amber-400/50">
+                      <UploadCloud className="w-5 h-5 text-amber-400 mb-1" />
+                      <span className="font-bold">Upload Front</span>
                       <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, setDlPhoto)} disabled={isLocked} />
                     </label>
                   )}
                 </div>
 
-                <div className="bg-[#0C1E35] p-3 rounded-2xl border border-slate-800">
-                  <p className="text-[10px] font-bold text-amber-300 uppercase mb-2">DL Back</p>
+                <div className="bg-[#0C1E35] p-3.5 rounded-2xl border border-slate-800">
+                  <p className="text-[10px] font-bold text-amber-300 uppercase mb-2">DL Back Photo *</p>
                   {dlBackPhoto ? (
                     <div className="relative aspect-video rounded-xl overflow-hidden border border-slate-700 group">
                       <img src={dlBackPhoto} alt="DL Back" className="w-full h-full object-cover" />
-                      <button onClick={() => setPreviewImage({ url: dlBackPhoto, title: "DL Back" })} className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-xs font-bold">
-                        <Eye className="w-4 h-4" />
+                      <button onClick={() => setPreviewImage({ url: dlBackPhoto, title: "Driving Licence Back" })} className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-xs font-bold gap-1">
+                        <Eye className="w-4 h-4" /> Preview
                       </button>
                     </div>
                   ) : (
-                    <label className="border border-dashed border-slate-700 rounded-xl p-4 flex flex-col items-center justify-center text-[10px] text-slate-400 cursor-pointer">
-                      <span>Upload Back</span>
+                    <label className="border border-dashed border-slate-700 rounded-xl p-4 flex flex-col items-center justify-center text-[10px] text-slate-400 cursor-pointer hover:border-amber-400/50">
+                      <UploadCloud className="w-5 h-5 text-amber-400 mb-1" />
+                      <span className="font-bold">Upload Back</span>
                       <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, setDlBackPhoto)} disabled={isLocked} />
                     </label>
                   )}
@@ -672,71 +631,55 @@ export default function OnboardingScreen({
             </motion.div>
           )}
 
-          {currentStep === "bank_police" && (
+          {/* STEP 5 — ADDRESS PROOF */}
+          {currentStep === "address_proof" && (
             <motion.div
-              key="bank_police"
+              key="address_proof"
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
               className="space-y-4"
             >
-              <div className="bg-[#0C1E35] p-4 rounded-2xl border border-slate-800">
-                <h3 className="text-xs font-bold text-amber-300 uppercase tracking-widest mb-1">
-                  Address & Bank Documents
+              <div className="bg-[#0C1E35] p-5 rounded-2xl border border-slate-800">
+                <h3 className="text-xs font-black text-amber-300 uppercase tracking-widest mb-1">
+                  STEP 5 — ADDRESS PROOF
                 </h3>
+                <p className="text-slate-400 text-[11px] font-medium leading-relaxed mb-4">
+                  Enter full residential address details and upload an Address Proof document photo (Utility bill / Rent agreement / Voter ID / Address proof copy).
+                </p>
 
-                <div className="space-y-3.5">
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                      Full Residential Address *
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={addressText}
-                      onChange={(e) => !isLocked && setAddressText(e.target.value)}
-                      readOnly={isLocked}
-                      placeholder="House No, Street, Landmark, City, Pincode"
-                      className={`w-full bg-[#08182D] border border-slate-700/60 rounded-xl py-2 px-3 text-xs font-semibold ${isLocked ? "opacity-80 cursor-not-allowed" : ""}`}
-                    />
-                  </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                    Address Proof Text / Full Address *
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={addressText}
+                    onChange={(e) => !isLocked && setAddressText(e.target.value)}
+                    readOnly={isLocked}
+                    placeholder="House No., Street, Landmark, City, State, Pincode"
+                    className={`w-full bg-[#08182D] border border-slate-700/60 rounded-xl py-2.5 px-3.5 text-xs font-medium focus:outline-none focus:border-amber-400 ${isLocked ? "opacity-80 cursor-not-allowed" : ""}`}
+                  />
                 </div>
               </div>
 
-              {/* Bank & Police Uploads */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-[#0C1E35] p-3 rounded-2xl border border-slate-800">
-                  <p className="text-[10px] font-bold text-amber-300 uppercase mb-2">Bank Passbook / Cheque</p>
-                  {bankPhoto ? (
-                    <div className="relative aspect-video rounded-xl overflow-hidden border border-slate-700 group">
-                      <img src={bankPhoto} alt="Bank Document" className="w-full h-full object-cover" />
-                      <button onClick={() => setPreviewImage({ url: bankPhoto, title: "Bank Document" })} className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-xs font-bold">
-                        <Eye className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <label className="border border-dashed border-slate-700 rounded-xl p-4 flex flex-col items-center justify-center text-[10px] text-slate-400 cursor-pointer">
-                      <span>Upload Bank</span>
-                      <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, setBankPhoto)} disabled={isLocked} />
-                    </label>
-                  )}
-                </div>
-
-                <div className="bg-[#0C1E35] p-3 rounded-2xl border border-slate-800">
-                  <p className="text-[10px] font-bold text-amber-300 uppercase mb-2">Police Verification</p>
-                  {policePhoto ? (
-                    <div className="relative aspect-video rounded-xl overflow-hidden border border-slate-700 group">
-                      <img src={policePhoto} alt="Police Verification" className="w-full h-full object-cover" />
-                      <button onClick={() => setPreviewImage({ url: policePhoto, title: "Police Verification" })} className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-xs font-bold">
-                        <Eye className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <label className="border border-dashed border-slate-700 rounded-xl p-4 flex flex-col items-center justify-center text-[10px] text-slate-400 cursor-pointer">
-                      <span>Upload Police Doc</span>
-                      <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, setPolicePhoto)} disabled={isLocked} />
-                    </label>
-                  )}
-                </div>
+              {/* Address Photo */}
+              <div className="bg-[#0C1E35] p-4 rounded-2xl border border-slate-800">
+                <p className="text-[10px] font-bold text-amber-300 uppercase mb-2">Address Proof Photo *</p>
+                {addressPhoto ? (
+                  <div className="relative aspect-video max-w-sm mx-auto rounded-xl overflow-hidden border border-slate-700 group">
+                    <img src={addressPhoto} alt="Address Proof" className="w-full h-full object-cover" />
+                    <button onClick={() => setPreviewImage({ url: addressPhoto, title: "Address Proof Photo" })} className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-xs font-bold gap-1">
+                      <Eye className="w-4 h-4" /> Preview Photo
+                    </button>
+                  </div>
+                ) : (
+                  <label className="border border-dashed border-slate-700 rounded-xl p-6 flex flex-col items-center justify-center text-[10px] text-slate-400 cursor-pointer hover:border-amber-400/50">
+                    <UploadCloud className="w-6 h-6 text-amber-400 mb-1.5" />
+                    <span className="font-bold text-xs text-slate-200">Upload Address Proof Document Photo</span>
+                    <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, setAddressPhoto)} disabled={isLocked} />
+                  </label>
+                )}
               </div>
             </motion.div>
           )}
@@ -745,16 +688,17 @@ export default function OnboardingScreen({
 
       {/* Action Footer */}
       <div className="p-4 bg-[#0A1A2E] border-t border-slate-800 flex items-center justify-between sticky bottom-0 z-40 gap-3">
-        {currentStep !== "personal" && (
+        {currentStep !== "profile" && (
           <button
             type="button"
             onClick={() => {
-              if (currentStep === "bank_police") setCurrentStep("dl_vehicle");
-              else if (currentStep === "dl_vehicle") setCurrentStep("identity");
-              else if (currentStep === "identity") setCurrentStep("personal");
+              if (currentStep === "address_proof") setCurrentStep("driving_licence");
+              else if (currentStep === "driving_licence") setCurrentStep("pan");
+              else if (currentStep === "pan") setCurrentStep("aadhaar");
+              else if (currentStep === "aadhaar") setCurrentStep("profile");
             }}
             disabled={isSubmitting}
-            className="flex-1 bg-slate-800 border border-slate-700 text-amber-300 rounded-xl py-3 text-xs font-extrabold uppercase"
+            className="flex-1 bg-slate-800 border border-slate-700 text-amber-300 rounded-xl py-3 text-xs font-extrabold uppercase hover:bg-slate-700 transition-colors"
           >
             Previous
           </button>
@@ -768,23 +712,23 @@ export default function OnboardingScreen({
         ) : (
           <button
             type="button"
-            onClick={currentStep === "bank_police" ? handleSubmitForm : validateAndNext}
+            onClick={currentStep === "address_proof" ? handleSubmitForm : validateAndNext}
             disabled={isSubmitting}
-            className="flex-2 bg-gradient-to-r from-amber-400 to-[#D5A144] text-[#08182D] rounded-xl py-3 text-xs font-black uppercase flex items-center justify-center gap-1.5 shadow-md"
+            className="flex-2 bg-gradient-to-r from-amber-400 to-[#D5A144] text-[#08182D] rounded-xl py-3 text-xs font-black uppercase flex items-center justify-center gap-1.5 shadow-md hover:brightness-110 transition-all"
           >
             {isSubmitting ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Saving to Sheet & Drive...</span>
+                <span>Saving Documents...</span>
               </>
-            ) : currentStep === "bank_police" ? (
+            ) : currentStep === "address_proof" ? (
               <>
                 <CheckCircle className="w-4.5 h-4.5" />
-                <span>Submit & Lock Documents</span>
+                <span>SUBMIT / SAVE DOCUMENTS</span>
               </>
             ) : (
               <>
-                <span>Next Step</span>
+                <span>NEXT</span>
                 <ArrowRight className="w-4.5 h-4.5" />
               </>
             )}
@@ -802,10 +746,10 @@ export default function OnboardingScreen({
             onClick={() => setPreviewImage(null)}
             className="fixed inset-0 bg-black/90 backdrop-blur-md z-[9999] flex flex-col items-center justify-center p-4"
           >
-            <div className="max-w-md w-full bg-[#0C1E35] border border-slate-700 rounded-2xl overflow-hidden p-4">
+            <div className="max-w-md w-full bg-[#0C1E35] border border-slate-700 rounded-2xl overflow-hidden p-4" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-3">
                 <h4 className="text-xs font-bold text-amber-300 uppercase">{previewImage.title}</h4>
-                <button onClick={() => setPreviewImage(null)} className="text-xs font-bold text-slate-400">Close ✕</button>
+                <button onClick={() => setPreviewImage(null)} className="text-xs font-bold text-slate-400 hover:text-white">Close ✕</button>
               </div>
               <img src={previewImage.url} alt={previewImage.title} className="w-full h-auto max-h-[70vh] object-contain rounded-xl" />
             </div>

@@ -833,98 +833,9 @@ export default function App() {
       bankPhoto: string;
       policePhoto: string;
     };
-  }) => {
+  }): Promise<{ success: boolean; message: string }> => {
     setIsOnboardingSubmitting(true);
     try {
-      // 1. Upload images to tmpfiles.org to get real, accessible public URLs
-      let selfieUrl = data.documents.selfie;
-      let aadhaarUrl = data.documents.aadhaarPhoto;
-      let dlUrl = data.documents.dlPhoto;
-      let addressUrl = data.documents.addressPhoto;
-
-      try {
-        const uploadPromises = [
-          uploadBase64Image(data.documents.selfie, `selfie_${data.phone}.png`).then(url => selfieUrl = url),
-          uploadBase64Image(data.documents.aadhaarPhoto, `aadhaar_${data.phone}.png`).then(url => aadhaarUrl = url),
-          uploadBase64Image(data.documents.dlPhoto, `dl_${data.phone}.png`).then(url => dlUrl = url),
-          uploadBase64Image(data.documents.addressPhoto, `address_${data.phone}.png`).then(url => addressUrl = url)
-        ];
-        await Promise.all(uploadPromises);
-      } catch (uploadErr) {
-        console.error("Some document image uploads failed:", uploadErr);
-      }
-
-      // 2. Setup local driver profile with the uploaded URLs
-      const newDriver: DriverDetails = {
-        id: `SSK-${Date.now().toString().slice(-5)}`,
-        name: data.name,
-        phone: data.phone,
-        email: data.email,
-        avatarUrl: "",
-        licenseNumber: data.dlNo,
-        licenseExpiry: "31 Dec 2035",
-        vehicleRegistration: "Pending Allocation"
-      };
-      setDriver(newDriver);
-
-      // 3. Prepare documents for app list
-      const listDocs: {
-        name: string;
-        fullName: string;
-        status: "pending";
-        expiryDate: string;
-        description: string;
-        documentNo: string;
-      }[] = [
-        {
-          name: "Selfie",
-          fullName: "Driver Profile Selfie",
-          status: "pending",
-          expiryDate: "N/A",
-          documentNo: "N/A",
-          description: "Driver profile selfie uploaded during registration. Pending administrative approval."
-        },
-        {
-          name: "Aadhaar",
-          fullName: "Aadhaar Identity Card",
-          status: "pending",
-          expiryDate: "N/A",
-          documentNo: data.aadhaarNo,
-          description: "Front Aadhaar Card copy uploaded during onboarding."
-        },
-        {
-          name: "DL",
-          fullName: "Driving Licence",
-          status: "pending",
-          expiryDate: "31 Dec 2035",
-          documentNo: data.dlNo,
-          description: `Driving Licence (DL) Copy. Licence Number: ${data.dlNo}.`
-        },
-        {
-          name: "Address Proof",
-          fullName: "Address Verification Document",
-          status: "pending",
-          expiryDate: "N/A",
-          documentNo: "N/A",
-          description: `Address: ${data.addressText}. Verification copy uploaded.`
-        }
-      ];
-
-      // Convert format to VehicleDocument for React state
-      const appDocs: VehicleDocument[] = listDocs.map((doc, idx) => ({
-        id: `doc-onb-${Date.now()}-${idx + 1}`,
-        name: doc.name,
-        fullName: doc.fullName,
-        status: "pending",
-        expiryDate: doc.expiryDate,
-        documentNo: doc.documentNo,
-        description: doc.description
-      }));
-
-      // Prepend to documents state so they are listed at the very top
-      setDocuments(prev => [...appDocs, ...prev]);
-
-      // 4. Append to the Google Sheet tab "Documents Sheet"
       let currentToken = accessToken;
       if (!currentToken) {
         console.log("No Google Access Token found in state. Requesting Google OAuth popup to authorize writing...");
@@ -933,110 +844,97 @@ export default function App() {
           if (authResult) {
             currentToken = authResult.accessToken;
             setAccessToken(authResult.accessToken);
-            console.log("Google OAuth successful. Token acquired:", currentToken);
           }
         } catch (authErr: any) {
           console.error("Google OAuth authentication failed during onboarding:", authErr);
         }
       }
 
-      if (currentToken) {
-        try {
-          console.log("Writing onboarding documents to Google Sheets (Tab: Driver_Documents)...");
-          const docRes = await saveDriverDocumentsToSheet({
-            driverName: data.name,
-            mobileNumber: data.phone,
-            etmId: data.etmId || driver?.etm || "",
-            aadhaarNumber: data.aadhaarNo,
-            panNumber: data.panNo,
-            dlNumber: data.dlNo,
-            address: data.addressText,
-            dob: data.dob,
-            emergencyContact: data.emergencyContact,
-            vehicleNumber: data.vehicleNo,
-            vehicleModel: data.vehicleModel,
-            profilePhotoUrl: data.documents.selfie,
-            aadhaarFrontUrl: data.documents.aadhaarPhoto,
-            aadhaarBackUrl: data.documents.aadhaarBackPhoto,
-            panCardUrl: data.documents.panPhoto,
-            dlFrontUrl: data.documents.dlPhoto,
-            dlBackUrl: data.documents.dlBackPhoto,
-            bankPassbookUrl: data.documents.bankPhoto,
-            policeVerificationUrl: data.documents.policePhoto,
-            status: "Submitted"
-          }, currentToken);
+      console.log("Writing onboarding documents to Google Sheets (Tab: Documents_Verification)...");
+      const docRes = await saveDriverDocumentsToVerificationSheet(
+        {
+          etmId: data.etmId || driver?.etm || "",
+          mobileNumber: data.phone || driver?.phone || "",
+          driverName: data.name || driver?.name || "Driver",
+          driverId: driver?.id || ""
+        },
+        {
+          profilePhoto: data.documents.selfie,
+          aadhaarFront: data.documents.aadhaarPhoto,
+          aadhaarBack: data.documents.aadhaarBackPhoto,
+          aadhaarNumber: data.aadhaarNo,
+          panCard: data.documents.panPhoto,
+          panNumber: data.panNo,
+          dlFront: data.documents.dlPhoto,
+          dlBack: data.documents.dlBackPhoto,
+          dlNumber: data.dlNo,
+          addressText: data.addressText,
+          addressPhoto: data.documents.addressPhoto
+        },
+        currentToken
+      );
 
-          if (docRes.success) {
-            setDocumentRecord({
-              registrationDateTime: new Date().toISOString(),
-              driverName: data.name,
-              mobileNumber: data.phone,
-              etmId: data.etmId || driver?.etm || "",
-              aadhaarNumber: data.aadhaarNo,
-              panNumber: data.panNo,
-              dlNumber: data.dlNo,
-              address: data.addressText,
-              dob: data.dob,
-              emergencyContact: data.emergencyContact,
-              vehicleNumber: data.vehicleNo,
-              vehicleModel: data.vehicleModel,
-              profilePhotoUrl: data.documents.selfie,
-              aadhaarFrontUrl: data.documents.aadhaarPhoto,
-              aadhaarBackUrl: data.documents.aadhaarBackPhoto,
-              panCardUrl: data.documents.panPhoto,
-              dlFrontUrl: data.documents.dlPhoto,
-              dlBackUrl: data.documents.dlBackPhoto,
-              bankPassbookUrl: data.documents.bankPhoto,
-              policeVerificationUrl: data.documents.policePhoto,
-              status: "Submitted",
-              lastUpdated: new Date().toISOString(),
-              isLocked: true
-            });
-            triggerPushNotification(
-              "Documents Locked & Saved 🔒",
-              "Driver documents uploaded to Drive and recorded in Driver_Documents sheet.",
-              "success"
-            );
-          } else {
-            triggerPushNotification(
-              "Document Lock Notice ⚠️",
-              docRes.message,
-              "warning"
-            );
-          }
-        } catch (sheetErr: any) {
-          console.error("Sheets sync failed:", sheetErr);
-          handleSheetsError(sheetErr);
-        }
+      if (docRes.success && docRes.updatedRecord) {
+        setDocumentRecord(docRes.updatedRecord);
+
+        // Update local driver profile
+        const newDriver: DriverDetails = {
+          id: driver?.id || `SSK-${Date.now().toString().slice(-5)}`,
+          name: docRes.updatedRecord.driverName || data.name || "Driver",
+          phone: docRes.updatedRecord.mobileNumber || data.phone || "",
+          email: data.email || driver?.email || "",
+          avatarUrl: docRes.updatedRecord.profilePhotoUrl || "",
+          licenseNumber: data.dlNo,
+          licenseExpiry: "31 Dec 2035",
+          vehicleRegistration: "Pending Allocation"
+        };
+        setDriver(newDriver);
+
+        triggerPushNotification(
+          "Documents Submitted 📄",
+          "Documents submitted successfully. Verification status: Pending.",
+          "success"
+        );
+
+        // Welcome Notification
+        const onboardingNotif: NotificationItem = {
+          id: `notif-onb-${Date.now()}`,
+          title: "Registration Received",
+          message: `Welcome! Your documents are undergoing verification. Status: Pending.`,
+          time: "Just Now",
+          type: "success",
+          read: false
+        };
+        setNotifications(prev => [onboardingNotif, ...prev]);
+
+        // Navigate to Dashboard
+        setTimeout(() => {
+          setActiveScreen(ActiveScreen.DASHBOARD);
+        }, 1200);
+
+        return {
+          success: true,
+          message: "Documents submitted successfully. Verification status: Pending."
+        };
       } else {
         triggerPushNotification(
-          "Saved Locally 📲",
-          "Onboarding completed locally. Google Sheet was NOT updated because Google authorization is missing.",
-          "info"
+          "Upload Failed ⚠️",
+          docRes.message || "Document upload failed. Your documents were not saved. Please try again.",
+          "warning"
         );
+        return {
+          success: false,
+          message: docRes.message || "Document upload failed. Your documents were not saved. Please try again."
+        };
       }
-
-      // 5. Welcome Notification
-      const onboardingNotif: NotificationItem = {
-        id: `notif-onb-${Date.now()}`,
-        title: "Registration Received",
-        message: `Welcome, ${data.name}! Your documents are undergoing verification. Our fleet admins will contact you shortly.`,
-        time: "Just Now",
-        type: "success",
-        read: false
-      };
-      setNotifications(prev => [onboardingNotif, ...prev]);
-
-      // Navigate to Dashboard screen
-      setActiveScreen(ActiveScreen.DASHBOARD);
     } catch (err: any) {
       console.error("Onboarding failed:", err);
-      triggerPushNotification(
-        "Onboarding Complete 🛠️",
-        "Registered successfully!",
-        "success"
-      );
-      setActiveScreen(ActiveScreen.DASHBOARD);
+      const errMsg = "Document upload failed. Your documents were not saved. Please try again.";
+      triggerPushNotification("Upload Error ❌", errMsg, "warning");
+      return {
+        success: false,
+        message: errMsg
+      };
     } finally {
       setIsOnboardingSubmitting(false);
     }
