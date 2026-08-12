@@ -162,7 +162,7 @@ export default function App() {
       if ("Notification" in window && window.Notification.permission === "granted") {
         new window.Notification(title, {
           body: message,
-          icon: "/assets/ssk_official_logo_transparent.png"
+          icon: "/ssk_master_logo.png"
         });
       }
     } catch (err) {

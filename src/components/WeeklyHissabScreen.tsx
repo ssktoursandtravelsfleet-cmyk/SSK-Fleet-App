@@ -5,10 +5,16 @@ import {
   RefreshCw, 
   AlertCircle, 
   FileText,
-  Loader2
+  Loader2,
+  Lock
 } from "lucide-react";
 import { DriverDetails } from "../types";
-import { fetchMsgFormatSheet } from "../lib/sheets";
+import { fetchMsgFormatSheet, fetchWeeklyHissabSheet } from "../lib/sheets";
+import {
+  fetchAllPublishedWeeks,
+  getWeekKey,
+  PublishedWeekRecord
+} from "../lib/publishedWeeksService";
 
 interface WeeklyHissabScreenProps {
   driver: DriverDetails;
@@ -184,6 +190,7 @@ export default function WeeklyHissabScreen({
   onNavigateToPayment
 }: WeeklyHissabScreenProps) {
   const [localMsgFormatRows, setLocalMsgFormatRows] = useState<string[][]>(msgFormatRows || []);
+  const [publishedMap, setPublishedMap] = useState<Record<string, PublishedWeekRecord>>({});
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [isFetchingWeek, setIsFetchingWeek] = useState<boolean>(false);
   const [selectedWeekId, setSelectedWeekId] = useState<string>("");
@@ -198,21 +205,31 @@ export default function WeeklyHissabScreen({
     }
   }, [msgFormatRows]);
 
+  const loadPublishedStatus = async () => {
+    const map = await fetchAllPublishedWeeks();
+    setPublishedMap(map);
+  };
+
   const loadMsgFormatData = async () => {
     setIsRefreshing(true);
     try {
-      const rows = await fetchMsgFormatSheet(accessToken);
+      await loadPublishedStatus();
+      let rows = await fetchWeeklyHissabSheet(accessToken);
+      if (!rows || rows.length === 0) {
+        rows = await fetchMsgFormatSheet(accessToken);
+      }
       if (rows && rows.length > 0) {
         setLocalMsgFormatRows(rows);
       }
     } catch (err) {
-      console.warn("Failed to refresh Msg Format sheet:", err);
+      console.warn("Failed to refresh Weekly Hissab sheet:", err);
     } finally {
       setIsRefreshing(false);
     }
   };
 
   useEffect(() => {
+    loadPublishedStatus();
     if (!localMsgFormatRows || localMsgFormatRows.length === 0) {
       loadMsgFormatData();
     }
@@ -342,6 +359,13 @@ export default function WeeklyHissabScreen({
     return selectedWeekObj.columnYText || extractColumnYText(selectedWeekObj.row, headers);
   }, [selectedWeekObj, headers]);
 
+  // Check if selected week is published in Firestore
+  const isSelectedWeekPublished = useMemo(() => {
+    if (!selectedWeekObj || !selectedWeekObj.weekLabel) return false;
+    const weekKey = getWeekKey(selectedWeekObj.weekLabel);
+    return !!publishedMap[weekKey]?.published;
+  }, [selectedWeekObj, publishedMap]);
+
   return (
     <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-950 text-[#333333] dark:text-slate-100 overflow-y-auto transition-colors duration-200" id="weekly-hissab-screen">
       {/* Top Header */}
@@ -409,11 +433,26 @@ export default function WeeklyHissabScreen({
           </div>
         )}
 
-        {/* Display Exact Column Y Statement Text */}
+        {/* Display Exact Column Y Statement Text or Published Check */}
         {isFetchingWeek ? (
           <div className="bg-white rounded-2xl p-8 border border-slate-200/80 text-center flex flex-col items-center justify-center shadow-xs space-y-3">
             <Loader2 className="w-7 h-7 animate-spin text-blue-600" />
-            <p className="text-xs font-bold text-slate-600">Fetching Column Y statement for selected week...</p>
+            <p className="text-xs font-bold text-slate-600">Fetching statement for selected week...</p>
+          </div>
+        ) : !isSelectedWeekPublished ? (
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-8 border border-amber-200 dark:border-amber-900/60 shadow-sm text-center flex flex-col items-center justify-center space-y-3">
+            <div className="w-14 h-14 rounded-2xl bg-amber-50 dark:bg-amber-950/80 border border-amber-200 dark:border-amber-800 flex items-center justify-center text-amber-600 dark:text-amber-400">
+              <Lock className="w-7 h-7" />
+            </div>
+            <h3 className="text-base font-black text-slate-900 dark:text-white">
+              Weekly Hissab Not Published
+            </h3>
+            <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 max-w-sm mx-auto leading-relaxed">
+              Weekly Hissab has not been published yet for <span className="font-black text-blue-600 dark:text-blue-400">{selectedWeekObj?.weekLabel || "this week"}</span>.
+            </p>
+            <p className="text-[11px] text-slate-400 font-medium">
+              Please check back later after admin publishes statements for this week period.
+            </p>
           </div>
         ) : columnYMessageText ? (
           <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 space-y-3" id="weekly-hissab-statement-card">

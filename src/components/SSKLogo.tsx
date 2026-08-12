@@ -1,29 +1,25 @@
-import React, { useState } from "react";
-import sskLogoImg from "../assets/images/ssk_official_logo_transparent.png";
+import React from "react";
+import sskMasterLogo from "../assets/images/ssk_master_logo.png";
 
 interface SSKLogoProps {
   className?: string;
   size?: number;
-  lightText?: boolean;
 }
 
-export default function SSKLogo({ className = "", size }: SSKLogoProps) {
-  const [hasError, setHasError] = useState(false);
-
-  if (hasError) {
-    return null;
-  }
-
+export default function SSKLogo({
+  className = "",
+  size,
+}: SSKLogoProps) {
   return (
     <img
-      src={sskLogoImg}
+      src={sskMasterLogo}
       alt="SSK Tours & Travels Fleet Partner Logo"
-      referrerPolicy="no-referrer"
-      onError={() => setHasError(true)}
-      className={`object-contain mx-auto ${className}`}
+      className={`object-contain block ${className}`}
       style={{
-        ...(size ? { width: size, height: "auto" } : {}),
+        width: size ? `${size}px` : undefined,
+        height: size ? `${size}px` : "auto",
         maxWidth: "100%",
+        objectFit: "contain",
         display: "block",
         filter: "none",
         mixBlendMode: "normal",
@@ -32,4 +28,3 @@ export default function SSKLogo({ className = "", size }: SSKLogoProps) {
     />
   );
 }
-

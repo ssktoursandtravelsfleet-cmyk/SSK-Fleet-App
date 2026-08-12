@@ -10,9 +10,19 @@ import {
   CheckCircle2, 
   AlertCircle, 
   RotateCcw,
-  DollarSign
+  DollarSign,
+  Globe,
+  Send,
+  X,
+  Check
 } from "lucide-react";
 import { fetchWeeklyHissabSheet } from "../../lib/sheets";
+import {
+  publishWeekStatus,
+  fetchAllPublishedWeeks,
+  getWeekKey,
+  PublishedWeekRecord
+} from "../../lib/publishedWeeksService";
 
 interface AdminWeeklyHissabProps {
   accessToken?: string | null;
@@ -132,10 +142,24 @@ export default function AdminWeeklyHissab({
   const [dateSearch, setDateSearch] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
 
+  // Publishing state
+  const [publishedMap, setPublishedMap] = useState<Record<string, PublishedWeekRecord>>({});
+  const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
+  const [isPublishing, setIsPublishing] = useState<boolean>(false);
+  const [publishSuccessMessage, setPublishSuccessMessage] = useState<string>("");
+  const [publishErrorMessage, setPublishErrorMessage] = useState<string>("");
+
+  // Fetch published weeks status from Firestore
+  const loadPublishedWeeks = async () => {
+    const map = await fetchAllPublishedWeeks();
+    setPublishedMap(map);
+  };
+
   // Load live data directly ONLY from Weekly_Hissab sheet tab
   const loadWeeklyData = async () => {
     setIsRefreshing(true);
     try {
+      await loadPublishedWeeks();
       const liveData = await fetchWeeklyHissabSheet(accessToken);
       if (liveData && liveData.length > 0) {
         setRawSheetRows(liveData);
@@ -154,6 +178,48 @@ export default function AdminWeeklyHissab({
   useEffect(() => {
     loadWeeklyData();
   }, [accessToken]);
+
+  // Check if current selected week is published
+  const currentWeekKey = useMemo(() => {
+    if (!selectedWeek || selectedWeek === "ALL") return "";
+    return getWeekKey(selectedWeek);
+  }, [selectedWeek]);
+
+  const isCurrentWeekPublished = useMemo(() => {
+    if (!currentWeekKey) return false;
+    return !!publishedMap[currentWeekKey]?.published;
+  }, [currentWeekKey, publishedMap]);
+
+  const handleOpenPublishModal = () => {
+    if (!selectedWeek || selectedWeek === "ALL") return;
+    setPublishErrorMessage("");
+    setShowConfirmModal(true);
+  };
+
+  const handleConfirmPublish = async () => {
+    if (!selectedWeek || selectedWeek === "ALL") return;
+    setIsPublishing(true);
+    setPublishErrorMessage("");
+    
+    try {
+      const result = await publishWeekStatus(selectedWeek, "Admin");
+      if (result.success && result.record) {
+        setPublishedMap((prev) => ({
+          ...prev,
+          [result.record!.weekKey]: result.record!
+        }));
+        setPublishSuccessMessage(`Weekly Hissab published successfully for ${selectedWeek}. Drivers can now view this week's Hissab.`);
+        setShowConfirmModal(false);
+        setTimeout(() => setPublishSuccessMessage(""), 6000);
+      } else {
+        setPublishErrorMessage(result.message || "Failed to publish Weekly Hissab.");
+      }
+    } catch (err: any) {
+      setPublishErrorMessage(err?.message || "An unexpected error occurred while publishing.");
+    } finally {
+      setIsPublishing(false);
+    }
+  };
 
   // Extract headers and data rows (truncated at Final OS, filtering out completely blank rows)
   const { headers, dataRows } = useMemo(() => {
@@ -399,7 +465,31 @@ export default function AdminWeeklyHissab({
           </p>
         </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-center">
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-center">
+          {/* Publish Weekly Hissab Button */}
+          {selectedWeek !== "ALL" ? (
+            isCurrentWeekPublished ? (
+              <div className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-400 rounded-xl text-xs font-black shadow-xs">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <span>Published ✓</span>
+              </div>
+            ) : (
+              <button
+                onClick={handleOpenPublishModal}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-98 text-white rounded-xl text-xs font-black shadow-md transition-all cursor-pointer"
+                id="btn-admin-publish-weekly-hissab"
+              >
+                <Globe className="w-3.5 h-3.5" />
+                <span>Publish Weekly Hissab</span>
+              </button>
+            )
+          ) : (
+            <div className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 text-xs font-semibold rounded-xl">
+              <Globe className="w-3.5 h-3.5 text-slate-400" />
+              <span>Select a Week to Publish</span>
+            </div>
+          )}
+
           <button
             onClick={loadWeeklyData}
             disabled={isRefreshing}
@@ -411,6 +501,104 @@ export default function AdminWeeklyHissab({
           </button>
         </div>
       </div>
+
+      {/* Success Notification Banner */}
+      {publishSuccessMessage && (
+        <div className="bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-200 dark:border-emerald-800 p-4 rounded-2xl flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-2.5 text-emerald-800 dark:text-emerald-200 text-xs font-bold">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            <span>{publishSuccessMessage}</span>
+          </div>
+          <button
+            onClick={() => setPublishSuccessMessage("")}
+            className="text-emerald-600 hover:text-emerald-800 text-xs font-bold cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 relative">
+            <button
+              onClick={() => setShowConfirmModal(false)}
+              disabled={isPublishing}
+              className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer disabled:opacity-50"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 rounded-2xl">
+                <Globe className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-[#0A2540] dark:text-white">
+                  Publish Weekly Hissab?
+                </h3>
+                <p className="text-xs text-slate-500 font-semibold mt-0.5">
+                  Confirm publishing for selected week period
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-slate-500">Selected Week:</span>
+                <span className="font-black text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/80 px-2.5 py-1 rounded-lg">
+                  {selectedWeek}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-slate-500">Matching Drivers:</span>
+                <span className="font-extrabold text-slate-800 dark:text-slate-200">
+                  {summaryStats.totalRows} drivers listed
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 dark:text-slate-300 font-medium leading-relaxed">
+              Are you sure you want to publish Weekly Hissab for <span className="font-bold text-slate-900 dark:text-white">{selectedWeek}</span>? Once published, drivers will immediately be able to view their Hissab statements for this week period in the Driver App.
+            </p>
+
+            {publishErrorMessage && (
+              <div className="p-3 bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-800 rounded-xl flex items-center gap-2 text-xs font-bold text-red-600 dark:text-red-400">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{publishErrorMessage}</span>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                onClick={() => setShowConfirmModal(false)}
+                disabled={isPublishing}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmPublish}
+                disabled={isPublishing}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-black shadow-md transition-all cursor-pointer disabled:opacity-60"
+              >
+                {isPublishing ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin text-emerald-200" />
+                    <span>Publishing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4" />
+                    <span>Publish Now</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 2. Top Summary Metrics Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">

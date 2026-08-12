@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Phone, Lock, Eye, EyeOff, ArrowRight, ShieldCheck, Check, Fingerprint, ScanFace, Sparkles, X, AlertCircle } from "lucide-react";
 import SSKLogo from "./SSKLogo";
+import mumbaiLandscapeImg from "../assets/images/mumbai_landscape_1783220079853.jpg";
 
 interface LoginScreenProps {
   phoneNumber: string;
@@ -473,10 +474,9 @@ export default function LoginScreen({
         {/* Mumbai Landscape Skyline Image */}
         <div className="w-full relative h-[100px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs p-1 mt-6 shrink-0 group">
           <img
-            src="/src/assets/images/mumbai_landscape_1783220079853.jpg"
+            src={mumbaiLandscapeImg}
             alt="Mumbai Skyline Landscape"
             className="w-full h-full object-cover rounded-xl opacity-90 group-hover:opacity-100 transition-all duration-300"
-            referrerPolicy="no-referrer"
           />
           {/* Subtle gradient overlay to blend into the card frame */}
           <div className="absolute inset-1 rounded-xl bg-gradient-to-t from-black/20 via-transparent to-transparent pointer-events-none" />
