@@ -28,8 +28,6 @@ try {
 
     const options = {
       body: body,
-      icon: '/ssk_master_logo.png',
-      badge: '/ssk_master_logo.png',
       vibrate: [200, 100, 200],
       tag: notifId, // Unique tag prevents duplicate notifications
       renotify: false,
@@ -59,8 +57,6 @@ self.addEventListener('push', (event) => {
 
     const options = {
       body: body,
-      icon: '/ssk_master_logo.png',
-      badge: '/ssk_master_logo.png',
       vibrate: [200, 100, 200],
       tag: notifId,
       renotify: false,

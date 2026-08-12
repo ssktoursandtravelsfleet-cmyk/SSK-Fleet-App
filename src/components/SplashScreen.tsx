@@ -1,6 +1,5 @@
 import React, { useEffect } from "react";
 import { motion } from "motion/react";
-import SSKLogo from "./SSKLogo";
 
 interface SplashScreenProps {
   onComplete: () => void;
@@ -24,27 +23,12 @@ export default function SplashScreen({ onComplete }: SplashScreenProps) {
       {/* Spacer top */}
       <div />
 
-      {/* Center Animated Logo and Brand Name */}
+      {/* Center Brand Name */}
       <div className="flex flex-col items-center justify-center">
-        <motion.div
-          initial={{ scale: 0.4, opacity: 0, rotate: -30 }}
-          animate={{ scale: 1, opacity: 1, rotate: 0 }}
-          transition={{
-            type: "spring",
-            stiffness: 70,
-            damping: 15,
-            delay: 0.2
-          }}
-          className="relative mb-6 flex items-center justify-center"
-        >
-          <SSKLogo size={220} className="relative z-10" />
-        </motion.div>
-
-        {/* Brand Name Text with dynamic delay */}
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.8, delay: 0.7, ease: "easeOut" }}
+          transition={{ duration: 0.8, delay: 0.3, ease: "easeOut" }}
           className="text-center"
         >
           <h1 className="text-2xl font-black tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-[#D5A144] to-amber-200 uppercase font-sans">

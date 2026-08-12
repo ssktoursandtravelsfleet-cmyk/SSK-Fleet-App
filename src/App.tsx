@@ -24,7 +24,6 @@ import WeeklyHissabScreen from "./components/WeeklyHissabScreen";
 import ProfileScreen from "./components/ProfileScreen";
 import HelpSupportScreen from "./components/HelpSupportScreen";
 import AdminPanelContainer from "./components/admin/AdminPanelContainer";
-import SSKLogo from "./components/SSKLogo";
 
 import { ActiveScreen, NotificationItem, VehicleDocument, TransactionItem, DriverDetails, PaymentRecord, DriverDocumentRecord } from "./types";
 import { mockDriver, mockDocuments, mockNotifications, mockTransactions } from "./data";
@@ -161,8 +160,7 @@ export default function App() {
     try {
       if ("Notification" in window && window.Notification.permission === "granted") {
         new window.Notification(title, {
-          body: message,
-          icon: "/ssk_master_logo.png"
+          body: message
         });
       }
     } catch (err) {
@@ -1466,9 +1464,6 @@ export default function App() {
               setPushNotification(null);
             }}
           >
-            {/* Round Mini SSK Logo Icon */}
-            <SSKLogo className="w-9 h-9 shrink-0" />
-            
             {/* Notification Text Detail */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between gap-2">
@@ -1512,17 +1507,10 @@ export default function App() {
           >
             {/* Header / Brand */}
             <div className="p-4 bg-[#0D47A1] text-white flex items-center justify-between border-b border-blue-900 shrink-0 h-16">
-              {!isDriverSidebarCollapsed ? (
-                <div className="flex items-center gap-3 overflow-hidden">
-                  <SSKLogo className="w-9 h-9 shrink-0" />
-                  <div className="min-w-0">
-                    <h3 className="font-extrabold text-xs text-white truncate">SSK Fleet</h3>
-                    <p className="text-[10px] text-blue-200 font-bold uppercase tracking-wider truncate">Driver Portal</p>
-                  </div>
-                </div>
-              ) : (
-                <div className="w-full flex justify-center">
-                  <SSKLogo className="w-9 h-9 shrink-0" />
+              {!isDriverSidebarCollapsed && (
+                <div className="min-w-0">
+                  <h3 className="font-extrabold text-xs text-white truncate">SSK Fleet</h3>
+                  <p className="text-[10px] text-blue-200 font-bold uppercase tracking-wider truncate">Driver Portal</p>
                 </div>
               )}
               <button

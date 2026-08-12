@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Phone, Lock, Eye, EyeOff, ArrowRight, ShieldCheck, Check, Fingerprint, ScanFace, Sparkles, X, AlertCircle } from "lucide-react";
-import SSKLogo from "./SSKLogo";
 import mumbaiLandscapeImg from "../assets/images/mumbai_landscape_1783220079853.jpg";
 
 interface LoginScreenProps {
@@ -191,19 +190,9 @@ export default function LoginScreen({
       transition={{ duration: 0.4 }}
       className="flex-1 flex flex-col justify-between p-5 pt-[calc(1.25rem+env(safe-area-inset-top,0px))] pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] bg-[#F5F7FA] text-[#333333] overflow-y-auto no-scrollbar relative min-h-screen"
     >
-      {/* Top Header / Logo Section */}
+      {/* Top Header Section */}
       <div className="flex flex-col items-center justify-center pt-2 pb-2">
-        <motion.div
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: "spring", stiffness: 120, damping: 20 }}
-          className="mb-2"
-        >
-          {/* Custom SSK Logo with branding */}
-          <SSKLogo size={130} className="hover:scale-105 transition-transform duration-300" />
-        </motion.div>
-
-        <h1 className="text-xl font-extrabold tracking-tight text-[#0D47A1] text-center mt-2">
+        <h1 className="text-xl font-extrabold tracking-tight text-[#0D47A1] text-center">
           SSK DRIVER APP
         </h1>
         <p className="text-[11px] text-slate-500 font-medium text-center mt-0.5 uppercase tracking-wider">

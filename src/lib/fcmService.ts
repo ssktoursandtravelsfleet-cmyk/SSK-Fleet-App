@@ -183,8 +183,6 @@ export function showSystemNotification(
 
   const options: any = {
     body: message,
-    icon: "/ssk_master_logo.png",
-    badge: "/ssk_master_logo.png",
     vibrate: [200, 100, 200],
     tag: notifId, // Unique tag prevents duplicates
     renotify: false,
