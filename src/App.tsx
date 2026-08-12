@@ -836,27 +836,42 @@ export default function App() {
   }): Promise<{ success: boolean; message: string }> => {
     setIsOnboardingSubmitting(true);
     try {
+      const cleanPhone = (data.phone || phoneNumber || driver?.phone || (typeof window !== "undefined" ? localStorage.getItem("logged_phone") : "") || "").replace(/\D/g, "").slice(-10);
+      const cleanEtm = (data.etmId || driver?.etm || driver?.ETM || (typeof window !== "undefined" ? localStorage.getItem("logged_etm") : "") || "").trim().toUpperCase();
+      const cleanName = (data.name || driver?.name || "Driver").trim();
+
+      if (!cleanPhone || !cleanEtm) {
+        return {
+          success: false,
+          message: "Both ETM ID and Mobile Number are required to save driver documents."
+        };
+      }
+
       let currentToken = accessToken;
       if (!currentToken) {
-        console.log("No Google Access Token found in state. Requesting Google OAuth popup to authorize writing...");
+        currentToken = getEffectiveToken();
+      }
+      if (!currentToken) {
+        console.log("No Google Access Token found in state or storage. Attempting Google OAuth login...");
         try {
           const authResult = await googleSignIn();
-          if (authResult) {
+          if (authResult?.accessToken) {
             currentToken = authResult.accessToken;
             setAccessToken(authResult.accessToken);
           }
         } catch (authErr: any) {
-          console.error("Google OAuth authentication failed during onboarding:", authErr);
+          console.warn("Google OAuth popup closed or failed during onboarding submission:", authErr);
+          // Non-blocking: submission will use base64 image upload fallback and save record locally
         }
       }
 
       console.log("Writing onboarding documents to Google Sheets (Tab: Documents_Verification)...");
       const docRes = await saveDriverDocumentsToVerificationSheet(
         {
-          etmId: data.etmId || driver?.etm || "",
-          mobileNumber: data.phone || driver?.phone || "",
-          driverName: data.name || driver?.name || "Driver",
-          driverId: driver?.id || ""
+          etmId: cleanEtm,
+          mobileNumber: cleanPhone,
+          driverName: cleanName,
+          driverId: driver?.id || `SSK-${Date.now().toString().slice(-5)}`
         },
         {
           profilePhoto: data.documents.selfie,

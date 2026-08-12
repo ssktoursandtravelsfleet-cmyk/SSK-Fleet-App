@@ -68,7 +68,10 @@ export default function OnboardingScreen({
   const [successMessage, setSuccessMessage] = useState("");
   const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null);
 
-  // STEP 1 — PROFILE PHOTO
+  // STEP 1 — PROFILE & DRIVER IDENTIFICATION
+  const [driverName, setDriverName] = useState(existingDocRecord?.driverName || "");
+  const [mobileNumber, setMobileNumber] = useState(initialPhone || existingDocRecord?.mobileNumber || "");
+  const [etmId, setEtmId] = useState(initialEtm || existingDocRecord?.etmId || "");
   const [selfie, setSelfie] = useState<string | null>(existingDocRecord?.profilePhotoUrl || null);
 
   // STEP 2 — AADHAAR CARD
@@ -136,6 +139,9 @@ export default function OnboardingScreen({
 
   const checkStepValidation = (step: OnboardingStep): string | null => {
     if (step === "profile") {
+      const cleanMob = mobileNumber.replace(/\D/g, "");
+      if (!cleanMob || cleanMob.length < 10) return "Valid 10-digit Mobile Number is required.";
+      if (!etmId.trim()) return "ETM ID is required (e.g. 102 or SSK102).";
       if (!selfie) return "Profile photo is required. Please upload or capture a profile photo.";
     } else if (step === "aadhaar") {
       const plainAadhaar = aadhaarNo.replace(/\s/g, "");
@@ -217,10 +223,10 @@ export default function OnboardingScreen({
     }
 
     const response = await onComplete({
-      name: existingDocRecord?.driverName || "Driver",
-      phone: initialPhone || existingDocRecord?.mobileNumber || "",
+      name: driverName.trim() || "Driver",
+      phone: mobileNumber.replace(/\D/g, "").slice(-10),
       email: "",
-      etmId: initialEtm || existingDocRecord?.etmId || "",
+      etmId: etmId.trim().toUpperCase(),
       aadhaarNo: aadhaarNo.replace(/\s/g, ""),
       panNo: panNo.toUpperCase().trim(),
       dlNo: dlNo.toUpperCase().trim(),
@@ -382,9 +388,58 @@ export default function OnboardingScreen({
               exit={{ opacity: 0, x: -20 }}
               className="space-y-4"
             >
+              {/* Driver Details Card */}
+              <div className="bg-[#0C1E35] p-5 rounded-2xl border border-slate-800 space-y-3.5">
+                <h4 className="text-[11px] font-black text-amber-300 uppercase tracking-widest">
+                  Driver Information
+                </h4>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1">
+                    Driver Full Name
+                  </label>
+                  <input
+                    type="text"
+                    value={driverName}
+                    onChange={(e) => !isLocked && setDriverName(e.target.value)}
+                    readOnly={isLocked}
+                    placeholder="Enter Full Name"
+                    className={`w-full bg-[#08182D] border border-slate-700/60 rounded-xl py-2.5 px-3 text-xs font-bold focus:outline-none focus:border-amber-400 ${isLocked ? "opacity-80 cursor-not-allowed" : ""}`}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1">
+                      Mobile Number *
+                    </label>
+                    <input
+                      type="tel"
+                      maxLength={10}
+                      value={mobileNumber}
+                      onChange={(e) => !isLocked && setMobileNumber(e.target.value.replace(/\D/g, ""))}
+                      readOnly={isLocked}
+                      placeholder="10-digit Mobile"
+                      className={`w-full bg-[#08182D] border border-slate-700/60 rounded-xl py-2.5 px-3 text-xs font-bold focus:outline-none focus:border-amber-400 ${isLocked ? "opacity-80 cursor-not-allowed" : ""}`}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1">
+                      ETM ID *
+                    </label>
+                    <input
+                      type="text"
+                      value={etmId}
+                      onChange={(e) => !isLocked && setEtmId(e.target.value.toUpperCase())}
+                      readOnly={isLocked}
+                      placeholder="e.g. 102 / SSK102"
+                      className={`w-full bg-[#08182D] border border-slate-700/60 rounded-xl py-2.5 px-3 text-xs font-bold uppercase focus:outline-none focus:border-amber-400 ${isLocked ? "opacity-80 cursor-not-allowed" : ""}`}
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div className="bg-[#0C1E35] p-5 rounded-2xl border border-slate-800">
                 <h3 className="text-xs font-black text-amber-300 uppercase tracking-widest mb-1 flex items-center justify-between">
-                  <span>STEP 1 — PROFILE PHOTO</span>
+                  <span>STEP 1 — PROFILE PHOTO *</span>
                   {isLocked && <Lock className="w-3.5 h-3.5 text-amber-400" />}
                 </h3>
                 <p className="text-slate-400 text-[11px] font-medium leading-relaxed mb-5">
