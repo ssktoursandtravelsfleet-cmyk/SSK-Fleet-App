@@ -2,7 +2,6 @@ import React from "react";
 import { motion } from "motion/react";
 import {
   Users,
-  UserCheck,
   FileCheck,
   UserX,
   Car,
@@ -12,13 +11,10 @@ import {
   Clock,
   ArrowRight,
   ShieldCheck,
-  PlusCircle,
   Bell,
-  FileText,
-  AlertCircle
+  FileText
 } from "lucide-react";
 import { AdminDriverItem, AdminVehicleItem, AdminScreen } from "../../types";
-import { formatVehicleNumber } from "../../lib/sheets";
 
 interface AdminDashboardProps {
   drivers: AdminDriverItem[];
@@ -30,12 +26,10 @@ interface AdminDashboardProps {
 export default function AdminDashboard({
   drivers = [],
   vehicles = [],
-  onNavigate,
-  onRefresh
+  onNavigate
 }: AdminDashboardProps) {
   // Calculations for dashboard summary cards
   const totalDrivers = drivers.length;
-  const pendingDrivers = drivers.filter(d => d.status === "Pending" || d.status === "Submitted").length;
   const pendingDocs = drivers.filter(d => d.documentStatus === "Pending" || d.documentStatus === "Submitted").length;
   const activeDrivers = drivers.filter(d => d.status === "Active" || d.status === "Approved").length;
   const inactiveDrivers = drivers.filter(d => d.status === "Inactive" || d.status === "Suspended" || d.status === "Rejected").length;
@@ -72,15 +66,6 @@ export default function AdminDashboard({
       icon: Users,
       color: "bg-blue-50 text-[#0D47A1] border-blue-200",
       targetScreen: AdminScreen.DRIVERS
-    },
-    {
-      title: "Pending Driver Approval",
-      value: pendingDrivers,
-      subtitle: "Requires Action",
-      icon: UserCheck,
-      color: "bg-amber-50 text-amber-700 border-amber-200",
-      badge: pendingDrivers > 0 ? "Pending" : null,
-      targetScreen: AdminScreen.DRIVER_VERIFICATION
     },
     {
       title: "Pending Documents",
@@ -173,11 +158,11 @@ export default function AdminDashboard({
 
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <button
-            onClick={() => onNavigate(AdminScreen.DRIVER_VERIFICATION)}
-            className="flex-1 sm:flex-none px-3.5 py-2 rounded-xl bg-white text-[#0D47A1] text-xs font-bold hover:bg-blue-50 transition-colors shadow-sm flex items-center justify-center gap-1.5"
+            onClick={() => onNavigate(AdminScreen.DOCUMENT_VERIFICATION)}
+            className="flex-1 sm:flex-none px-3.5 py-2 rounded-xl bg-white text-[#0D47A1] text-xs font-bold hover:bg-blue-50 transition-colors shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
           >
-            <UserCheck className="w-4 h-4 text-[#0D47A1]" />
-            <span>Verifications ({pendingDrivers})</span>
+            <FileCheck className="w-4 h-4 text-[#0D47A1]" />
+            <span>Document Verification ({pendingDocs})</span>
           </button>
         </div>
       </div>
@@ -188,23 +173,10 @@ export default function AdminDashboard({
           <span className="w-2 h-2 rounded-full bg-[#1E88E5]"></span>
           Quick Actions
         </h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <button
-            onClick={() => onNavigate(AdminScreen.DRIVER_VERIFICATION)}
-            className="p-3 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-[#1E88E5] transition-all text-left flex items-center gap-3 group"
-          >
-            <div className="w-9 h-9 rounded-lg bg-blue-50 text-[#0D47A1] flex items-center justify-center font-bold">
-              <UserCheck className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-slate-800 group-hover:text-[#0D47A1]">Driver Approval</p>
-              <p className="text-[10px] text-slate-500">{pendingDrivers} awaiting</p>
-            </div>
-          </button>
-
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <button
             onClick={() => onNavigate(AdminScreen.DOCUMENT_VERIFICATION)}
-            className="p-3 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-[#1E88E5] transition-all text-left flex items-center gap-3 group"
+            className="p-3 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-[#1E88E5] transition-all text-left flex items-center gap-3 group cursor-pointer"
           >
             <div className="w-9 h-9 rounded-lg bg-purple-50 text-purple-700 flex items-center justify-center font-bold">
               <FileCheck className="w-5 h-5" />
@@ -217,7 +189,7 @@ export default function AdminDashboard({
 
           <button
             onClick={() => onNavigate(AdminScreen.NOTIFICATIONS)}
-            className="p-3 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-[#1E88E5] transition-all text-left flex items-center gap-3 group"
+            className="p-3 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-[#1E88E5] transition-all text-left flex items-center gap-3 group cursor-pointer"
           >
             <div className="w-9 h-9 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center font-bold">
               <Bell className="w-5 h-5" />
@@ -230,7 +202,7 @@ export default function AdminDashboard({
 
           <button
             onClick={() => onNavigate(AdminScreen.REPORTS)}
-            className="p-3 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-[#1E88E5] transition-all text-left flex items-center gap-3 group"
+            className="p-3 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-[#1E88E5] transition-all text-left flex items-center gap-3 group cursor-pointer"
           >
             <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
               <FileText className="w-5 h-5" />
@@ -286,74 +258,6 @@ export default function AdminDashboard({
             );
           })}
         </div>
-      </div>
-
-      {/* Recent Activity / Pending Approvals Preview */}
-      <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <UserCheck className="w-5 h-5 text-[#0D47A1]" />
-            <h3 className="text-sm font-bold text-[#0D47A1]">Newly Registered Drivers Awaiting Approval</h3>
-          </div>
-          <button
-            onClick={() => onNavigate(AdminScreen.DRIVER_VERIFICATION)}
-            className="text-xs font-bold text-[#1E88E5] hover:underline flex items-center gap-1"
-          >
-            <span>View All ({pendingDrivers})</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
-        {drivers.filter(d => d.status === "Pending" || d.status === "Submitted").length === 0 ? (
-          <div className="text-center py-6 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-            <UserCheck className="w-8 h-8 text-emerald-500 mx-auto mb-2 opacity-80" />
-            <p className="text-xs font-bold text-slate-700">All drivers are verified!</p>
-            <p className="text-[11px] text-slate-500">No pending registrations requiring review at this time.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
-                  <th className="p-2.5">Driver Name</th>
-                  <th className="p-2.5">Mobile Number</th>
-                  <th className="p-2.5">ETM ID</th>
-                  <th className="p-2.5">Vehicle</th>
-                  <th className="p-2.5">Status</th>
-                  <th className="p-2.5 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                {drivers
-                  .filter(d => d.status === "Pending" || d.status === "Submitted")
-                  .slice(0, 5)
-                  .map((driver, idx) => (
-                    <tr key={`${driver.id}-${driver.mobile || idx}`} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="p-2.5 font-bold text-slate-900">{driver.name}</td>
-                      <td className="p-2.5 font-mono text-slate-600">{driver.mobile}</td>
-                      <td className="p-2.5 font-bold text-[#0D47A1]">{driver.etmId && !["UNASSIGNED", "N/A", "NULL", "UNDEFINED"].includes(driver.etmId.toUpperCase()) ? driver.etmId : ""}</td>
-                      <td className="p-2.5 font-semibold text-slate-800">
-                        {formatVehicleNumber(driver.vehicleNumber)}
-                      </td>
-                      <td className="p-2.5">
-                        <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-100 text-amber-800">
-                          {driver.status}
-                        </span>
-                      </td>
-                      <td className="p-2.5 text-right">
-                        <button
-                          onClick={() => onNavigate(AdminScreen.DRIVER_VERIFICATION)}
-                          className="px-2.5 py-1 text-[11px] font-bold bg-[#0D47A1] text-white rounded-lg hover:bg-blue-800 transition-colors shadow-2xs"
-                        >
-                          Review
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
-        )}
       </div>
     </div>
   );

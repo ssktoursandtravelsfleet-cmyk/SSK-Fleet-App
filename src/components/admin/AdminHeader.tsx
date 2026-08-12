@@ -23,8 +23,6 @@ export default function AdminHeader({
     switch (screen) {
       case AdminScreen.DASHBOARD:
         return "Admin Dashboard";
-      case AdminScreen.DRIVER_VERIFICATION:
-        return "Driver Verification";
       case AdminScreen.DOCUMENT_VERIFICATION:
         return "Document Verification";
       case AdminScreen.DRIVERS:

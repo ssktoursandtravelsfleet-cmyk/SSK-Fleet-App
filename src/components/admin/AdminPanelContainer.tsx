@@ -3,7 +3,6 @@ import { AdminScreen, AdminDriverItem, AdminVehicleItem, DriverDetails } from ".
 import AdminHeader from "./AdminHeader";
 import AdminDrawer from "./AdminDrawer";
 import AdminDashboard from "./AdminDashboard";
-import AdminDriverVerification from "./AdminDriverVerification";
 import AdminDocumentVerification from "./AdminDocumentVerification";
 import AdminDriverManagement from "./AdminDriverManagement";
 import AdminOutstandingManagement from "./AdminOutstandingManagement";
@@ -22,7 +21,7 @@ import {
   clearSheetCache
 } from "../../lib/sheets";
 import { dispatchDriverNotification } from "../../lib/notificationService";
-import { syncApprovedDriver, syncRejectedDriver, getVerificationStatus } from "../../lib/googleSheets";
+import { syncApprovedDriver, syncRejectedDriver } from "../../lib/googleSheets";
 
 interface AdminPanelContainerProps {
   accessToken?: string | null;
@@ -285,8 +284,7 @@ export default function AdminPanelContainer({
     return res;
   };
 
-  const pendingDriversCount = drivers.filter(d => getVerificationStatus(d) === "Pending").length;
-  const pendingDocCount = drivers.filter(d => d.documentStatus === "Pending" || d.documentStatus === "Submitted").length;
+    const pendingDocCount = drivers.filter(d => d.documentStatus === "Pending" || d.documentStatus === "Submitted").length;
 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-900 flex flex-col lg:flex-row font-sans">
@@ -299,7 +297,6 @@ export default function AdminPanelContainer({
         onLogout={onLogout}
         adminName={currentAdminDriver?.name || "Admin Manager"}
         adminMobile={currentAdminDriver?.phone || "Fleet Master"}
-        pendingDriverCount={pendingDriversCount}
         pendingDocCount={pendingDocCount}
       />
 
@@ -322,15 +319,6 @@ export default function AdminPanelContainer({
             vehicles={vehicles}
             onNavigate={(screen) => setActiveScreen(screen)}
             onRefresh={loadAdminData}
-          />
-        )}
-
-        {activeScreen === AdminScreen.DRIVER_VERIFICATION && (
-          <AdminDriverVerification
-            drivers={drivers}
-            onApproveDriver={handleApproveDriver}
-            onRejectDriver={handleRejectDriver}
-            isProcessing={isRefreshing}
           />
         )}
 

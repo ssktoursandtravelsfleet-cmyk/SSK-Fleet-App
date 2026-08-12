@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from "motion/react";
 import {
   X,
   LayoutDashboard,
-  UserCheck,
   FileCheck,
   Users,
   Car,
@@ -29,7 +28,6 @@ interface AdminDrawerProps {
   onLogout: () => void;
   adminName?: string;
   adminMobile?: string;
-  pendingDriverCount?: number;
   pendingDocCount?: number;
 }
 
@@ -41,7 +39,6 @@ export default function AdminDrawer({
   onLogout,
   adminName = "Admin Console",
   adminMobile = "Fleet Operations",
-  pendingDriverCount = 0,
   pendingDocCount = 0
 }: AdminDrawerProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -52,12 +49,6 @@ export default function AdminDrawer({
       label: "Dashboard",
       icon: LayoutDashboard,
       badge: null
-    },
-    {
-      id: AdminScreen.DRIVER_VERIFICATION,
-      label: "Driver Verification",
-      icon: UserCheck,
-      badge: pendingDriverCount > 0 ? pendingDriverCount : null
     },
     {
       id: AdminScreen.DOCUMENT_VERIFICATION,
