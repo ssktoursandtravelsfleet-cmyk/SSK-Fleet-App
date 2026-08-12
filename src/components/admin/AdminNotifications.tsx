@@ -6,7 +6,7 @@ import {
   MessageSquare,
   AlertTriangle,
   CheckCircle,
-  Users,
+  XCircle,
   Smartphone
 } from "lucide-react";
 import { AdminDriverItem } from "../../types";
@@ -16,10 +16,12 @@ interface AdminNotificationsProps {
   onSendNotification: (
     title: string,
     message: string,
-    type: "info" | "warning" | "success" | "danger",
-    targetDriverEtm?: string,
-    targetDriverName?: string,
-    channel?: string
+    alertLevel: string,
+    targetDriverId: string,
+    targetDriverEtm: string,
+    targetDriverName: string,
+    mobileNumber: string,
+    channel: string
   ) => Promise<{ success: boolean; message: string } | void>;
   isProcessing?: boolean;
 }
@@ -31,26 +33,34 @@ export default function AdminNotifications({
 }: AdminNotificationsProps) {
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
-  const [notifType, setNotifType] = useState<"info" | "warning" | "success" | "danger">("info");
+  const [alertLevel, setAlertLevel] = useState<string>("Information");
   const [targetDriver, setTargetDriver] = useState<string>("ALL");
-  const [channel, setChannel] = useState<"APP" | "WHATSAPP" | "IMPORTANT">("APP");
+  const [channel, setChannel] = useState<string>("In-App Push Alert");
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !message) {
-      alert("Please fill in both subject and message content.");
+    setSuccessMsg(null);
+    setErrorMsg(null);
+
+    if (!title.trim() || !message.trim()) {
+      setErrorMsg("Please fill in both notice header and message content.");
       return;
     }
 
     try {
-      const selectedDriverObj = drivers.find((d) => (d.etmId || d.id || d.mobile) === targetDriver);
-      const targetEtm = targetDriver === "ALL" ? "ALL" : (selectedDriverObj?.etmId || selectedDriverObj?.id || selectedDriverObj?.mobile || targetDriver);
-      const targetName = targetDriver === "ALL" ? "All Fleet Drivers" : (selectedDriverObj?.name || "Fleet Driver");
-      const channelLabel = channel === "WHATSAPP" ? "WhatsApp Message" : channel === "IMPORTANT" ? "Important Notice" : "In-App Push Alert";
+      const selectedDriverObj = targetDriver === "ALL"
+        ? null
+        : drivers.find((d) => (d.id || d.etmId || d.mobile) === targetDriver || d.id === targetDriver || d.etmId === targetDriver || d.mobile === targetDriver);
 
-      if (channel === "WHATSAPP") {
-        const cleanMobile = selectedDriverObj?.mobile ? selectedDriverObj.mobile.replace(/\D/g, "") : (targetDriver !== "ALL" ? targetDriver.replace(/\D/g, "") : "");
+      const targetDriverId = targetDriver === "ALL" ? "ALL" : (selectedDriverObj?.id || selectedDriverObj?.etmId || "DRV-" + (selectedDriverObj?.mobile || ""));
+      const targetDriverEtm = targetDriver === "ALL" ? "ALL" : (selectedDriverObj?.etmId || selectedDriverObj?.id || "N/A");
+      const targetDriverName = targetDriver === "ALL" ? "All Fleet Drivers" : (selectedDriverObj?.name || "Fleet Driver");
+      const mobileNumber = targetDriver === "ALL" ? "ALL" : (selectedDriverObj?.mobile || "");
+
+      if (channel === "WhatsApp Message") {
+        const cleanMobile = mobileNumber !== "ALL" ? mobileNumber.replace(/\D/g, "") : "";
         const encodedText = encodeURIComponent(`*${title}*\n\n${message}\n\n_SSK Driver Fleet Operations_`);
         const waUrl = cleanMobile
           ? `https://wa.me/91${cleanMobile}?text=${encodedText}`
@@ -58,16 +68,32 @@ export default function AdminNotifications({
         window.open(waUrl, "_blank");
       }
 
-      const res = await onSendNotification(title, message, notifType, targetEtm, targetName, channelLabel);
+      const res = await onSendNotification(
+        title.trim(),
+        message.trim(),
+        alertLevel,
+        targetDriverId,
+        targetDriverEtm,
+        targetDriverName,
+        mobileNumber,
+        channel
+      );
+
+      if (res && res.success === false) {
+        setErrorMsg(res.message || "Notification could not be saved. Please try again.");
+        return;
+      }
+
       const outputMsg = (res && typeof res === "object" && "message" in res && typeof res.message === "string")
         ? res.message
-        : (targetEtm !== "ALL" ? `Notification sent successfully to ${targetName} (${targetEtm}).` : "Notification broadcasted successfully to All Fleet Drivers.");
+        : (targetDriver !== "ALL" ? `Notification sent successfully to ${targetDriverName} (${targetDriverEtm}).` : "Notification broadcasted successfully to All Fleet Drivers.");
+
       setSuccessMsg(outputMsg);
-      setTimeout(() => setSuccessMsg(null), 5000);
       setTitle("");
       setMessage("");
     } catch (err: any) {
-      alert("Failed to send notification: " + (err?.message || "Unknown error"));
+      console.error("Dispatch notification error:", err);
+      setErrorMsg(err?.message || "Notification could not be saved. Please try again.");
     }
   };
 
@@ -81,7 +107,7 @@ export default function AdminNotifications({
             <h2 className="text-base sm:text-lg font-bold text-amber-900">Fleet Notifications & Broadcasts</h2>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Broadcast app alerts, WhatsApp messages, or urgent notices to drivers.
+            Dispatch app alerts, WhatsApp messages, or urgent notices directly to driver accounts and log to Notifications Sheet.
           </p>
         </div>
       </div>
@@ -90,10 +116,21 @@ export default function AdminNotifications({
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-2"
+          className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-2 shadow-xs"
         >
-          <CheckCircle className="w-4 h-4 text-emerald-600" />
+          <CheckCircle className="w-4.5 h-4.5 text-emerald-600 shrink-0" />
           <span>{successMsg}</span>
+        </motion.div>
+      )}
+
+      {errorMsg && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-center gap-2 shadow-xs"
+        >
+          <XCircle className="w-4.5 h-4.5 text-rose-600 shrink-0" />
+          <span>{errorMsg}</span>
         </motion.div>
       )}
 
@@ -104,18 +141,19 @@ export default function AdminNotifications({
           <label className="text-xs font-bold text-slate-700 block mb-2">Notification Channel</label>
           <div className="grid grid-cols-3 gap-2">
             {[
-              { id: "APP", label: "In-App Push Alert", icon: Smartphone },
-              { id: "WHATSAPP", label: "WhatsApp Message", icon: MessageSquare },
-              { id: "IMPORTANT", label: "Important Notice", icon: AlertTriangle }
+              { id: "In-App Push Alert", label: "In-App Push Alert", icon: Smartphone },
+              { id: "WhatsApp Message", label: "WhatsApp Message", icon: MessageSquare },
+              { id: "Important Notice", label: "Important Notice", icon: AlertTriangle }
             ].map((ch) => {
               const Icon = ch.icon;
+              const isSelected = channel === ch.id;
               return (
                 <button
                   key={ch.id}
                   type="button"
-                  onClick={() => setChannel(ch.id as any)}
-                  className={`p-3 rounded-xl border text-xs font-bold transition-all flex flex-col items-center gap-1.5 ${
-                    channel === ch.id
+                  onClick={() => setChannel(ch.id)}
+                  className={`p-3 rounded-xl border text-xs font-bold transition-all flex flex-col items-center gap-1.5 cursor-pointer ${
+                    isSelected
                       ? "bg-[#0D47A1] text-white border-[#0D47A1] shadow-xs"
                       : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
                   }`}
@@ -130,7 +168,7 @@ export default function AdminNotifications({
 
         {/* Target Driver Selection */}
         <div>
-          <label className="text-xs font-bold text-slate-700 block mb-1">Target Recipient</label>
+          <label className="text-xs font-bold text-slate-700 block mb-1">Target Driver Recipient</label>
           <select
             value={targetDriver}
             onChange={(e) => setTargetDriver(e.target.value)}
@@ -138,10 +176,10 @@ export default function AdminNotifications({
           >
             <option value="ALL">📢 All Active Fleet Drivers ({drivers.length})</option>
             {drivers.map((d, idx) => {
-              const driverVal = d.etmId || d.id || d.mobile || `driver-${idx}`;
+              const driverVal = d.id || d.etmId || d.mobile || `driver-${idx}`;
               return (
-                <option key={`${d.id || idx}-${idx}`} value={driverVal}>
-                  👤 {d.name} ({d.mobile}) - ETM: {d.etmId || d.id || "N/A"}
+                <option key={`${driverVal}-${idx}`} value={driverVal}>
+                  👤 {d.name} ({d.mobile}) - Driver ID: {d.id || "N/A"} - ETM: {d.etmId || "N/A"}
                 </option>
               );
             })}
@@ -151,24 +189,27 @@ export default function AdminNotifications({
         {/* Severity Type */}
         <div>
           <label className="text-xs font-bold text-slate-700 block mb-1">Alert Level</label>
-          <div className="flex items-center gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {[
-              { id: "info", label: "Information", color: "bg-blue-100 text-blue-800" },
-              { id: "warning", label: "Warning / Due", color: "bg-amber-100 text-amber-800" },
-              { id: "success", label: "Success / Payment", color: "bg-emerald-100 text-emerald-800" },
-              { id: "danger", label: "Urgent Action", color: "bg-rose-100 text-rose-800" }
-            ].map((tp) => (
-              <button
-                key={tp.id}
-                type="button"
-                onClick={() => setNotifType(tp.id as any)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  notifType === tp.id ? `${tp.color} ring-2 ring-slate-800` : "bg-slate-100 text-slate-500"
-                }`}
-              >
-                {tp.label}
-              </button>
-            ))}
+              { id: "Information", label: "Information", color: "bg-blue-100 text-blue-800" },
+              { id: "Warning / Due", label: "Warning / Due", color: "bg-amber-100 text-amber-800" },
+              { id: "Success / Payment", label: "Success / Payment", color: "bg-emerald-100 text-emerald-800" },
+              { id: "Urgent Action", label: "Urgent Action", color: "bg-rose-100 text-rose-800" }
+            ].map((tp) => {
+              const isSelected = alertLevel === tp.id;
+              return (
+                <button
+                  key={tp.id}
+                  type="button"
+                  onClick={() => setAlertLevel(tp.id)}
+                  className={`px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    isSelected ? `${tp.color} ring-2 ring-slate-800 shadow-xs` : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                  }`}
+                >
+                  {tp.label}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -201,7 +242,7 @@ export default function AdminNotifications({
         <button
           type="submit"
           disabled={isProcessing}
-          className="w-full py-3 bg-[#0D47A1] hover:bg-blue-800 text-white font-bold text-xs rounded-xl shadow-md transition-colors flex items-center justify-center gap-2"
+          className="w-full py-3 bg-[#0D47A1] hover:bg-blue-800 text-white font-bold text-xs rounded-xl shadow-md transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
         >
           <Send className="w-4 h-4" />
           <span>Dispatch Broadcast Notice</span>

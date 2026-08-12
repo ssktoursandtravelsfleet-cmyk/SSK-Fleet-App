@@ -124,13 +124,20 @@ export interface NotificationItem {
   message: string;
   time: string;
   type: "info" | "warning" | "success" | "danger";
+  alertLevel?: string;
   read: boolean;
+  readStatus?: string;
+  readAt?: string;
+  targetDriverId?: string;
   etmId?: string;
   driverName?: string;
+  mobileNumber?: string;
   channel?: string;
-  createdAt?: string;
+  sentBy?: string;
+  sentByName?: string;
   createdBy?: string;
-  readAt?: string;
+  deliveryStatus?: string;
+  createdAt?: string;
 }
 
 export interface TransactionItem {

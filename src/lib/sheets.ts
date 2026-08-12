@@ -4245,6 +4245,37 @@ export async function updateDriverStatusInSheet(
   }
 }
 
+export const NOTIFICATIONS_SHEET_HEADERS = [
+  "Notification ID",
+  "Date & Time",
+  "Notification Channel",
+  "Alert Level",
+  "Target Driver ID",
+  "ETM ID",
+  "Driver Name",
+  "Mobile Number",
+  "Notice Header",
+  "Message Content",
+  "Sent By",
+  "Sent By Name",
+  "Delivery Status",
+  "Read Status",
+  "Read Date & Time",
+  "Created At"
+];
+
+export function generateNotificationId(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const hours = String(now.getHours()).padStart(2, "0");
+  const mins = String(now.getMinutes()).padStart(2, "0");
+  const secs = String(now.getSeconds()).padStart(2, "0");
+  const rand = Math.floor(1000 + Math.random() * 9000);
+  return `NOTIF-${year}${month}${day}-${hours}${mins}${secs}-${rand}`;
+}
+
 /**
  * Parses raw Notifications sheet rows, filtering specifically for the target driver
  */
@@ -4261,16 +4292,21 @@ export function parseNotificationRows(
 
   // Column header indices
   const idCol = headers.findIndex(h => ["notificationid", "id", "notifid"].includes(h));
-  const etmCol = headers.findIndex(h => ["etmid", "driverid", "driver_id", "target", "uid", "driver"].includes(h));
+  const dateCol = headers.findIndex(h => ["date&time", "datetime", "date", "timestamp"].includes(h));
+  const channelCol = headers.findIndex(h => ["notificationchannel", "channel"].includes(h));
+  const levelCol = headers.findIndex(h => ["alertlevel", "type", "severity", "level"].includes(h));
+  const targetDriverIdCol = headers.findIndex(h => ["targetdriverid", "driverid", "uid"].includes(h));
+  const etmCol = headers.findIndex(h => ["etmid", "etm"].includes(h));
   const nameCol = headers.findIndex(h => ["drivername", "name"].includes(h));
-  const titleCol = headers.findIndex(h => ["title", "header", "subject", "noticeheader"].includes(h));
-  const msgCol = headers.findIndex(h => ["message", "body", "text", "detailedmessage", "content"].includes(h));
-  const typeCol = headers.findIndex(h => ["alertlevel", "type", "severity", "category", "alerttype"].includes(h));
-  const channelCol = headers.findIndex(h => ["channel", "notificationchannel"].includes(h));
-  const createdCol = headers.findIndex(h => ["createdat", "createddate", "time", "date", "timestamp"].includes(h));
-  const byCol = headers.findIndex(h => ["createdby", "admin"].includes(h));
+  const mobileCol = headers.findIndex(h => ["mobilenumber", "mobile", "phone"].includes(h));
+  const titleCol = headers.findIndex(h => ["noticeheader", "title", "header", "subject"].includes(h));
+  const msgCol = headers.findIndex(h => ["messagecontent", "message", "body", "text", "content"].includes(h));
+  const sentByCol = headers.findIndex(h => ["sentby", "admin"].includes(h));
+  const sentByNameCol = headers.findIndex(h => ["sentbyname", "createdby"].includes(h));
+  const deliveryCol = headers.findIndex(h => ["deliverystatus", "delivery"].includes(h));
   const readCol = headers.findIndex(h => ["readstatus", "read", "status", "isread"].includes(h));
-  const readAtCol = headers.findIndex(h => ["readat", "readdatetime"].includes(h));
+  const readAtCol = headers.findIndex(h => ["readdate&time", "readdatetime", "readat"].includes(h));
+  const createdCol = headers.findIndex(h => ["createdat", "created"].includes(h));
 
   // Determine logged-in driver's identifiers:
   const driverEtm = (matchedDriver?.etm || (matchedDriver as any)?.ETM || loggedDriverId || "").trim().toUpperCase();
@@ -4278,67 +4314,67 @@ export function parseNotificationRows(
   const driverIdStr = (matchedDriver?.id || loggedDriverId || "").trim().toUpperCase();
 
   const results: NotificationItem[] = [];
+  const seenIds = new Set<string>();
 
   dataRows.forEach((row, rowIndex) => {
     if (!row || row.length === 0 || row.every(cell => !cell || !cell.trim())) return;
 
-    // Default column mapping if headers were standard 11-column order:
-    // Col 0: ID, Col 1: ETM ID, Col 2: Driver Name, Col 3: Title, Col 4: Message, Col 5: Alert Level, Col 6: Channel, Col 7: Created At, Col 8: Created By, Col 9: Read Status, Col 10: Read At
-    let notifId = (idCol !== -1 && row[idCol]) ? row[idCol].trim() : (row[0] || `NOTIF_${rowIndex + 1}`);
-    let targetEtm = (etmCol !== -1 && row[etmCol]) ? row[etmCol].trim() : (row[1] || "ALL").trim();
-    let targetName = (nameCol !== -1 && row[nameCol]) ? row[nameCol].trim() : (row[2] || "");
-    let title = (titleCol !== -1 && row[titleCol]) ? row[titleCol].trim() : (row[3] || row[2] || "Notification");
-    let message = (msgCol !== -1 && row[msgCol]) ? row[msgCol].trim() : (row[4] || row[3] || "");
-    let typeVal = (typeCol !== -1 && row[typeCol]) ? row[typeCol].trim().toLowerCase() : (row[5] || row[4] || "info").toLowerCase();
-    let channelVal = (channelCol !== -1 && row[channelCol]) ? row[channelCol].trim() : (row[6] || "In-App Push Alert");
-    let createdAtVal = (createdCol !== -1 && row[createdCol]) ? row[createdCol].trim() : (row[7] || row[0] || new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }));
-    let createdByVal = (byCol !== -1 && row[byCol]) ? row[byCol].trim() : (row[8] || "Admin Manager");
-    let readStatusVal = (readCol !== -1 && row[readCol]) ? row[readCol].trim() : (row[9] || row[5] || "Unread");
-    let readAtVal = (readAtCol !== -1 && row[readAtCol]) ? row[readAtCol].trim() : (row[10] || "");
+    // Read values using headers or fallback 16-column positional indices
+    const notifId = (idCol !== -1 && row[idCol]) ? row[idCol].trim() : (row[0] || `NOTIF_${rowIndex + 1}`).trim();
+    if (!notifId || seenIds.has(notifId)) return;
 
-    // Handle legacy 6-column format if headers were absent
-    if (headers.length < 8 && row.length <= 6) {
-      createdAtVal = row[0] || createdAtVal;
-      targetEtm = row[1] || targetEtm;
-      title = row[2] || title;
-      message = row[3] || message;
-      typeVal = (row[4] || typeVal).toLowerCase();
-      readStatusVal = row[5] || readStatusVal;
-    }
+    const dateTimeVal = (dateCol !== -1 && row[dateCol]) ? row[dateCol].trim() : (row[1] || "").trim();
+    const channelVal = (channelCol !== -1 && row[channelCol]) ? row[channelCol].trim() : (row[2] || "In-App Push Alert").trim();
+    const alertLevelVal = (levelCol !== -1 && row[levelCol]) ? row[levelCol].trim() : (row[3] || "Information").trim();
+    const targetDriverIdVal = (targetDriverIdCol !== -1 && row[targetDriverIdCol]) ? row[targetDriverIdCol].trim().toUpperCase() : (row[4] || "ALL").trim().toUpperCase();
+    const targetEtmVal = (etmCol !== -1 && row[etmCol]) ? row[etmCol].trim().toUpperCase() : (row[5] || "ALL").trim().toUpperCase();
+    const targetNameVal = (nameCol !== -1 && row[nameCol]) ? row[nameCol].trim() : (row[6] || "All Fleet Drivers").trim();
+    const targetMobileVal = (mobileCol !== -1 && row[mobileCol]) ? row[mobileCol].trim() : (row[7] || "ALL").trim();
+    const titleVal = (titleCol !== -1 && row[titleCol]) ? row[titleCol].trim() : (row[8] || "Notification").trim();
+    const msgVal = (msgCol !== -1 && row[msgCol]) ? row[msgCol].trim() : (row[9] || "").trim();
+    const sentByVal = (sentByCol !== -1 && row[sentByCol]) ? row[sentByCol].trim() : (row[10] || "Admin").trim();
+    const sentByNameVal = (sentByNameCol !== -1 && row[sentByNameCol]) ? row[sentByNameCol].trim() : (row[11] || "Admin Manager").trim();
+    const deliveryStatusVal = (deliveryCol !== -1 && row[deliveryCol]) ? row[deliveryCol].trim() : (row[12] || "Sent").trim();
+    const readStatusVal = (readCol !== -1 && row[readCol]) ? row[readCol].trim() : (row[13] || "Unread").trim();
+    const readAtVal = (readAtCol !== -1 && row[readAtCol]) ? row[readAtCol].trim() : (row[14] || "").trim();
+    const createdAtVal = (createdCol !== -1 && row[createdCol]) ? row[createdCol].trim() : (row[15] || dateTimeVal || new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })).trim();
 
     // Target filtering check
-    const upperTarget = targetEtm.toUpperCase();
-
     let isMatch = false;
 
     // 1. Broadcast to ALL / BROADCAST / EVERYONE
-    if (!upperTarget || upperTarget === "ALL" || upperTarget === "BROADCAST" || upperTarget === "EVERYONE") {
+    if (
+      !targetDriverIdVal || targetDriverIdVal === "ALL" || targetDriverIdVal === "BROADCAST" || targetDriverIdVal === "EVERYONE" ||
+      !targetEtmVal || targetEtmVal === "ALL" || targetEtmVal === "BROADCAST" || targetEtmVal === "EVERYONE"
+    ) {
       isMatch = true;
     }
-    // 2. Target matches driver's ETM ID
-    else if (driverEtm && upperTarget === driverEtm) {
+    // 2. Matches Driver ID
+    else if (driverIdStr && targetDriverIdVal === driverIdStr) {
       isMatch = true;
     }
-    // 3. Target matches driver's ID
-    else if (driverIdStr && upperTarget === driverIdStr) {
+    // 3. Matches ETM ID
+    else if (driverEtm && targetEtmVal === driverEtm) {
       isMatch = true;
     }
-    // 4. Target matches driver's mobile number
+    // 4. Matches Mobile Number
     else if (driverMobile) {
-      const cleanTargetDigits = targetEtm.replace(/\D/g, "").slice(-10);
+      const cleanTargetDigits = targetMobileVal.replace(/\D/g, "").slice(-10);
       if (cleanTargetDigits && cleanTargetDigits === driverMobile) {
         isMatch = true;
       }
     }
 
-    // If driver is NOT matched, EXCLUDE this notification
     if (!isMatch) return;
 
-    // Normalize alert type
+    seenIds.add(notifId);
+
+    // Normalize alert level
     let normType: "info" | "warning" | "success" | "danger" = "info";
-    if (typeVal.includes("warn")) normType = "warning";
-    else if (typeVal.includes("succ") || typeVal.includes("pay")) normType = "success";
-    else if (typeVal.includes("danger") || typeVal.includes("urg") || typeVal.includes("err")) normType = "danger";
+    const lowerLevel = alertLevelVal.toLowerCase();
+    if (lowerLevel.includes("warn") || lowerLevel.includes("due")) normType = "warning";
+    else if (lowerLevel.includes("succ") || lowerLevel.includes("pay")) normType = "success";
+    else if (lowerLevel.includes("urg") || lowerLevel.includes("act") || lowerLevel.includes("danger") || lowerLevel.includes("err")) normType = "danger";
 
     // Normalize read status
     const lowerRead = readStatusVal.toLowerCase();
@@ -4346,17 +4382,24 @@ export function parseNotificationRows(
 
     results.push({
       id: notifId,
-      title,
-      message,
-      time: createdAtVal,
+      title: titleVal,
+      message: msgVal,
+      time: dateTimeVal || createdAtVal,
       type: normType,
+      alertLevel: alertLevelVal,
       read: isRead,
-      etmId: targetEtm,
-      driverName: targetName,
+      readStatus: isRead ? "Read" : "Unread",
+      readAt: readAtVal,
+      targetDriverId: targetDriverIdVal,
+      etmId: targetEtmVal,
+      driverName: targetNameVal,
+      mobileNumber: targetMobileVal,
       channel: channelVal,
-      createdAt: createdAtVal,
-      createdBy: createdByVal,
-      readAt: readAtVal
+      sentBy: sentByVal,
+      sentByName: sentByNameVal,
+      createdBy: sentByNameVal || sentByVal,
+      deliveryStatus: deliveryStatusVal,
+      createdAt: createdAtVal || dateTimeVal
     });
   });
 
@@ -4369,71 +4412,84 @@ export function parseNotificationRows(
 export async function sendAdminNotificationToSheet(
   title: string,
   message: string,
-  type: "info" | "warning" | "success" | "danger",
+  alertLevel: string = "Information",
+  targetDriverId: string = "ALL",
   targetDriverEtm: string = "ALL",
   targetDriverName: string = "All Fleet Drivers",
+  mobileNumber: string = "ALL",
   channel: string = "In-App Push Alert",
-  createdBy: string = "Admin Manager",
+  sentBy: string = "Admin",
+  sentByName: string = "Admin Manager",
   accessToken?: string | null
-): Promise<{ success: boolean; message: string }> {
+): Promise<{ success: boolean; message: string; notifId: string }> {
   try {
     validateConfig(SPREADSHEET_ID);
     const sheetName = "Notifications";
     const effectiveToken = getEffectiveToken(accessToken);
-    const nowStr = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
-    const notifId = `NOTIF_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
 
-    const headerRow = [
-      "Notification ID",
-      "ETM ID",
-      "Driver Name",
-      "Title",
-      "Message",
-      "Alert Level",
-      "Channel",
-      "Created At",
-      "Created By",
-      "Read Status",
-      "Read At"
-    ];
-
-    const cleanEtm = (targetDriverEtm || "ALL").trim();
-    const cleanName = (targetDriverName || "All Fleet Drivers").trim();
-
-    const rowValues = [
-      notifId,
-      cleanEtm,
-      cleanName,
-      title,
-      message,
-      type || "info",
-      channel || "In-App Push Alert",
-      nowStr,
-      createdBy || "Admin Manager",
-      "Unread",
-      ""
-    ];
-
-    if (effectiveToken) {
-      // Fetch existing rows to check if header exists
-      const existingRows = await fetchSheetValues(SPREADSHEET_ID, sheetName, effectiveToken).catch(() => [] as string[][]);
-      if (!existingRows || existingRows.length === 0) {
-        await appendSheetRows(SPREADSHEET_ID, sheetName, [headerRow], effectiveToken);
-      }
-      await appendSheetRows(SPREADSHEET_ID, sheetName, [rowValues], effectiveToken);
+    if (!effectiveToken) {
+      throw new Error("Google OAuth access token missing. Please sign in with Google to dispatch notifications.");
     }
 
-    const targetLabel = cleanEtm !== "ALL" && cleanEtm !== ""
+    const now = new Date();
+    const nowStr = now.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+    const notifId = generateNotificationId();
+
+    const cleanTitle = (title || "").trim();
+    const cleanMsg = (message || "").trim();
+    const cleanChannel = (channel || "In-App Push Alert").trim();
+    const cleanAlertLevel = (alertLevel || "Information").trim();
+    const cleanDriverId = (targetDriverId || "ALL").trim();
+    const cleanEtm = (targetDriverEtm || "ALL").trim();
+    const cleanName = (targetDriverName || "All Fleet Drivers").trim();
+    const cleanMobile = (mobileNumber || "ALL").trim();
+    const cleanSentBy = (sentBy || "Admin").trim();
+    const cleanSentByName = (sentByName || "Admin Manager").trim();
+
+    const rowValues = [
+      notifId,             // 0: Notification ID
+      nowStr,              // 1: Date & Time
+      cleanChannel,        // 2: Notification Channel
+      cleanAlertLevel,     // 3: Alert Level
+      cleanDriverId,       // 4: Target Driver ID
+      cleanEtm,            // 5: ETM ID
+      cleanName,           // 6: Driver Name
+      cleanMobile,         // 7: Mobile Number
+      cleanTitle,          // 8: Notice Header
+      cleanMsg,            // 9: Message Content
+      cleanSentBy,         // 10: Sent By
+      cleanSentByName,     // 11: Sent By Name
+      "Sent",              // 12: Delivery Status
+      "Unread",            // 13: Read Status
+      "",                  // 14: Read Date & Time
+      nowStr               // 15: Created At
+    ];
+
+    // Fetch existing rows to check if header row exists
+    const existingRows = await fetchSheetValues(SPREADSHEET_ID, sheetName, effectiveToken).catch(() => [] as string[][]);
+    if (!existingRows || existingRows.length === 0) {
+      await appendSheetRows(SPREADSHEET_ID, sheetName, [NOTIFICATIONS_SHEET_HEADERS], effectiveToken);
+    }
+
+    // Append notification record to Google Sheets
+    await appendSheetRows(SPREADSHEET_ID, sheetName, [rowValues], effectiveToken);
+
+    const recipientLabel = cleanDriverId !== "ALL" && cleanEtm !== "ALL"
       ? `${cleanName} (${cleanEtm})`
       : "All Fleet Drivers";
 
     return {
       success: true,
-      message: `Notification sent successfully to ${targetLabel}.`
+      message: `Notification sent successfully to ${recipientLabel}.`,
+      notifId
     };
   } catch (err: any) {
-    console.error("Error sending admin notification:", err);
-    return { success: false, message: err?.message || "Failed to send notification." };
+    console.error("Error sending admin notification to Google Sheets:", err);
+    return {
+      success: false,
+      message: "Notification could not be saved. Please try again.",
+      notifId: ""
+    };
   }
 }
 
@@ -4456,11 +4512,11 @@ export async function markNotificationReadInSheet(
     const headers = rows[0].map(h => normalizeHeader(h));
     const idCol = headers.findIndex(h => ["notificationid", "id", "notifid"].includes(h));
     const readCol = headers.findIndex(h => ["readstatus", "read", "status", "isread"].includes(h));
-    const readAtCol = headers.findIndex(h => ["readat", "readdatetime"].includes(h));
+    const readAtCol = headers.findIndex(h => ["readdate&time", "readdatetime", "readat"].includes(h));
 
     const targetIdColIndex = idCol !== -1 ? idCol : 0;
-    const targetReadColIndex = readCol !== -1 ? readCol : 9;
-    const targetReadAtColIndex = readAtCol !== -1 ? readAtCol : 10;
+    const targetReadColIndex = readCol !== -1 ? readCol : 13;
+    const targetReadAtColIndex = readAtCol !== -1 ? readAtCol : 14;
 
     let targetRowIdx = -1;
     for (let i = 1; i < rows.length; i++) {
@@ -4478,8 +4534,15 @@ export async function markNotificationReadInSheet(
     const rowNumber = targetRowIdx + 1; // 1-based index in Sheet
     const nowStr = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
 
-    // Helper to get column letter (0 -> A, 9 -> J, 10 -> K)
-    const getColLetter = (colIdx: number): string => String.fromCharCode(65 + colIdx);
+    const getColLetter = (colIdx: number): string => {
+      let letter = "";
+      let temp = colIdx;
+      while (temp >= 0) {
+        letter = String.fromCharCode((temp % 26) + 65) + letter;
+        temp = Math.floor(temp / 26) - 1;
+      }
+      return letter;
+    };
 
     const readCellRange = `Notifications!${getColLetter(targetReadColIndex)}${rowNumber}`;
     const urlRead = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(readCellRange)}?valueInputOption=USER_ENTERED`;

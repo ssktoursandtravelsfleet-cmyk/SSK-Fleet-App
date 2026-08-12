@@ -252,25 +252,33 @@ export default function AdminPanelContainer({
   const handleSendNotification = async (
     title: string,
     message: string,
-    type: "info" | "warning" | "success" | "danger",
-    targetDriverEtm?: string,
-    targetDriverName?: string,
-    channel?: string
+    alertLevel: string = "Information",
+    targetDriverId: string = "ALL",
+    targetDriverEtm: string = "ALL",
+    targetDriverName: string = "All Fleet Drivers",
+    mobileNumber: string = "ALL",
+    channel: string = "In-App Push Alert"
   ) => {
     const matchedDriver = drivers.find(
-      (d) => d.etmId === targetDriverEtm || d.id === targetDriverEtm || d.mobile === targetDriverEtm
+      (d) => d.id === targetDriverId || d.etmId === targetDriverEtm || d.mobile === mobileNumber || d.id === targetDriverEtm || d.etmId === targetDriverId
     );
-    const mobileNumber = matchedDriver?.mobile || "";
+
+    const actualDriverId = targetDriverId !== "ALL" ? (targetDriverId || matchedDriver?.id || "DRV-" + (matchedDriver?.mobile || "")) : "ALL";
+    const actualEtm = targetDriverEtm !== "ALL" ? (targetDriverEtm || matchedDriver?.etmId || "N/A") : "ALL";
+    const actualName = targetDriverName !== "All Fleet Drivers" ? (targetDriverName || matchedDriver?.name || "Fleet Driver") : "All Fleet Drivers";
+    const actualMobile = mobileNumber !== "ALL" ? (mobileNumber || matchedDriver?.mobile || "") : "ALL";
 
     const res = await dispatchDriverNotification({
       title,
       message,
-      alertLevel: type,
-      targetDriverEtm: targetDriverEtm || "ALL",
-      targetDriverName: targetDriverName || matchedDriver?.name || "Fleet Driver",
-      mobileNumber,
+      alertLevel,
+      targetDriverId: actualDriverId,
+      targetDriverEtm: actualEtm,
+      targetDriverName: actualName,
+      mobileNumber: actualMobile,
       channel,
-      createdBy: currentAdminDriver?.name || "Admin Manager",
+      sentBy: currentAdminDriver?.id || currentAdminDriver?.phone || (currentAdminDriver as any)?.mobile || "Admin",
+      sentByName: currentAdminDriver?.name || "Admin Manager",
       accessToken
     });
 

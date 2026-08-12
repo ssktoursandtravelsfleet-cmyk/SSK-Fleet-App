@@ -16,17 +16,20 @@ import { sendAdminNotificationToSheet, markNotificationReadInSheet } from "./she
 export interface SendNotificationParams {
   title: string;
   message: string;
-  alertLevel: "info" | "warning" | "success" | "danger";
-  targetDriverEtm?: string; // e.g. "ETM32932" or "ALL"
-  targetDriverName?: string; // e.g. "Imran Ali Mulla"
+  alertLevel?: string;
+  targetDriverId?: string;
+  targetDriverEtm?: string;
+  targetDriverName?: string;
   mobileNumber?: string;
-  channel?: string; // "In-App Push Alert", "WhatsApp Message", "Important Notice", etc.
+  channel?: string;
   createdBy?: string;
+  sentBy?: string;
+  sentByName?: string;
   accessToken?: string | null;
 }
 
 /**
- * Dispatch notification to Firestore `driver_notifications` collection + Google Sheets backup
+ * Dispatch notification to Google Sheets `Notifications` tab first + Firestore `driver_notifications` collection
  */
 export async function dispatchDriverNotification(params: SendNotificationParams): Promise<{
   success: boolean;
@@ -36,114 +39,102 @@ export async function dispatchDriverNotification(params: SendNotificationParams)
   const {
     title,
     message,
-    alertLevel,
+    alertLevel = "Information",
+    targetDriverId = "ALL",
     targetDriverEtm = "ALL",
     targetDriverName = "All Fleet Drivers",
-    mobileNumber = "",
+    mobileNumber = "ALL",
     channel = "In-App Push Alert",
-    createdBy = "Admin Manager",
+    sentBy = "Admin",
+    sentByName = "Admin Manager",
+    createdBy,
     accessToken
   } = params;
 
-  if (!title.trim() || !message.trim()) {
-    throw new Error("Notification title and message content are required.");
+  if (!title || !title.trim() || !message || !message.trim()) {
+    throw new Error("Notification header title and message content are required.");
   }
 
-  const cleanEtm = String(targetDriverEtm || "ALL").trim().toUpperCase();
+  const cleanDriverId = String(targetDriverId || "ALL").trim();
+  const cleanEtm = String(targetDriverEtm || "ALL").trim();
   const cleanName = String(targetDriverName || "All Fleet Drivers").trim();
-  const cleanMobile = String(mobileNumber || "").replace(/\D/g, "").slice(-10);
+  const cleanMobile = String(mobileNumber || "ALL").trim();
+  const cleanChannel = String(channel || "In-App Push Alert").trim();
+  const cleanAlertLevel = String(alertLevel || "Information").trim();
+  const cleanSentBy = String(sentBy || "Admin").trim();
+  const cleanSentByName = String(sentByName || createdBy || "Admin Manager").trim();
+
+  // 1. PRIMARY WRITE: Write to Google Sheets "Notifications" tab
+  const sheetRes = await sendAdminNotificationToSheet(
+    title,
+    message,
+    cleanAlertLevel,
+    cleanDriverId,
+    cleanEtm,
+    cleanName,
+    cleanMobile,
+    cleanChannel,
+    cleanSentBy,
+    cleanSentByName,
+    accessToken
+  );
+
+  // If Google Sheets write fails -> DO NOT SHOW SUCCESS -> Return error
+  if (!sheetRes || !sheetRes.success) {
+    return {
+      success: false,
+      message: sheetRes?.message || "Notification could not be saved. Please try again."
+    };
+  }
+
+  const notifId = sheetRes.notifId;
   const now = new Date();
-  const notifId = `NOTIF_${now.getTime()}_${Math.floor(1000 + Math.random() * 9000)}`;
   const nowFormatted = now.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
 
+  // 2. REALTIME SYNC: Store in Firestore `driver_notifications` collection
   const notifData = {
     id: notifId,
     notificationId: notifId,
-    recipientType: cleanEtm === "ALL" ? "all" : "driver",
-    recipientId: cleanEtm,
-    driverId: cleanEtm,
+    recipientType: cleanDriverId === "ALL" && cleanEtm === "ALL" ? "all" : "driver",
+    recipientId: cleanEtm !== "ALL" ? cleanEtm : cleanDriverId,
+    targetDriverId: cleanDriverId,
+    driverId: cleanDriverId,
     etmId: cleanEtm,
     driverName: cleanName,
     mobileNumber: cleanMobile,
     title: title.trim(),
     message: message.trim(),
-    notificationType: alertLevel || "info",
-    alertLevel: alertLevel || "info",
-    channel: channel || "In-App Push Alert",
+    alertLevel: cleanAlertLevel,
+    notificationType: cleanAlertLevel,
+    type: cleanAlertLevel,
+    channel: cleanChannel,
     createdAt: now.toISOString(),
     createdAtFormatted: nowFormatted,
     read: false,
+    readStatus: "Unread",
+    deliveryStatus: "Sent",
     status: "sent",
-    createdBy: createdBy || "Admin Manager",
-    sentBy: createdBy || "Admin Manager"
+    createdBy: cleanSentByName,
+    sentBy: cleanSentBy,
+    sentByName: cleanSentByName
   };
 
-  console.log("DISPATCHING DRIVER NOTIFICATION TO FIRESTORE:", notifData);
-
   try {
-    // 1. PRIMARY WRITE: Store directly in Firebase Firestore database
     const docRef = doc(db, "driver_notifications", notifId);
     await setDoc(docRef, notifData);
-
-    // 1b. VERIFY WRITE: Verify document exists in Firestore
-    const verifySnap = await getDoc(docRef);
-    if (!verifySnap.exists()) {
-      throw new Error("Document write verification failed on Firestore.");
-    }
-
-    console.info("Successfully written & verified notification in Firestore:", notifId, verifySnap.data());
-
-    // 2. SECONDARY WRITE: Append to Google Sheets for audit / backup log
-    sendAdminNotificationToSheet(
-      title,
-      message,
-      alertLevel,
-      cleanEtm,
-      cleanName,
-      channel,
-      createdBy,
-      accessToken
-    ).catch((sheetErr) => {
-      console.warn("Google Sheets notification backup failed (Firestore write succeeded):", sheetErr);
-    });
-
-    const recipientLabel = cleanEtm !== "ALL" && cleanEtm !== ""
-      ? `${cleanName} (${cleanEtm})`
-      : "All Fleet Drivers";
-
-    return {
-      success: true,
-      message: `Notification sent successfully to ${recipientLabel}!`,
-      notifId
-    };
-  } catch (firestoreErr: any) {
-    console.error("CRITICAL: Failed to write notification to Firestore:", firestoreErr);
-
-    // Fallback: Try Google Sheets if Firestore fails
-    try {
-      const sheetRes = await sendAdminNotificationToSheet(
-        title,
-        message,
-        alertLevel,
-        cleanEtm,
-        cleanName,
-        channel,
-        createdBy,
-        accessToken
-      );
-      if (sheetRes.success) {
-        return {
-          success: true,
-          message: `Notification recorded via Google Sheets backup to ${cleanName}.`,
-          notifId
-        };
-      }
-    } catch (sErr) {
-      console.error("Google Sheets fallback also failed:", sErr);
-    }
-
-    throw new Error(`Failed to deliver notification: ${firestoreErr?.message || "Database write error"}`);
+  } catch (fsErr) {
+    console.warn("Firestore sync notification warning:", fsErr);
   }
+
+  const recipientLabel = cleanDriverId !== "ALL" && cleanEtm !== "ALL"
+    ? `${cleanName} (${cleanEtm})`
+    : "All Fleet Drivers";
+
+  return {
+    success: true,
+    message: `Notification sent successfully to ${recipientLabel}.`,
+    notifId
+  };
 }
 
 /**
