@@ -14,7 +14,10 @@ import {
   Loader2, 
   Lock, 
   Eye, 
-  UploadCloud 
+  UploadCloud,
+  Landmark,
+  ShieldCheck,
+  IdCard
 } from "lucide-react";
 import { DriverDocumentRecord } from "../types";
 
@@ -27,6 +30,7 @@ interface OnboardingScreenProps {
     phone: string;
     email: string;
     etmId: string;
+    driverId?: string;
     aadhaarNo: string;
     panNo: string;
     dlNo: string;
@@ -51,7 +55,7 @@ interface OnboardingScreenProps {
   isSubmitting: boolean;
 }
 
-type OnboardingStep = "profile" | "aadhaar" | "pan" | "driving_licence" | "address_proof";
+type OnboardingStep = "profile" | "aadhaar" | "pan" | "driving_licence" | "address_proof" | "bank_passbook";
 
 export default function OnboardingScreen({
   initialPhone,
@@ -68,10 +72,11 @@ export default function OnboardingScreen({
   const [successMessage, setSuccessMessage] = useState("");
   const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null);
 
-  // STEP 1 — PROFILE & DRIVER IDENTIFICATION
-  const [driverName, setDriverName] = useState(existingDocRecord?.driverName || "");
+  // AUTOMATIC DRIVER IDENTIFICATION & STEP 1
+  const [driverName, setDriverName] = useState(existingDocRecord?.driverName || "Driver");
   const [mobileNumber, setMobileNumber] = useState(initialPhone || existingDocRecord?.mobileNumber || "");
   const [etmId, setEtmId] = useState(initialEtm || existingDocRecord?.etmId || "");
+  const [driverId, setDriverId] = useState(existingDocRecord?.etmId ? `DR-${existingDocRecord.etmId}` : `DR-${initialEtm || "AUTO"}`);
   const [selfie, setSelfie] = useState<string | null>(existingDocRecord?.profilePhotoUrl || null);
 
   // STEP 2 — AADHAAR CARD
@@ -90,14 +95,18 @@ export default function OnboardingScreen({
 
   // STEP 5 — ADDRESS PROOF
   const [addressText, setAddressText] = useState(existingDocRecord?.address || "");
-  const [addressPhoto, setAddressPhoto] = useState<string | null>(existingDocRecord?.bankPassbookUrl || null);
+  const [addressPhoto, setAddressPhoto] = useState<string | null>(existingDocRecord?.addressPhotoUrl || null);
+
+  // STEP 6 — BANK PASSBOOK
+  const [bankPhoto, setBankPhoto] = useState<string | null>(existingDocRecord?.bankPassbookUrl || null);
 
   const stepsList: { id: OnboardingStep; stepNumber: number; title: string; label: string; icon: any }[] = [
-    { id: "profile", stepNumber: 1, title: "STEP 1 — PROFILE PHOTO", label: "Profile Photo", icon: User },
-    { id: "aadhaar", stepNumber: 2, title: "STEP 2 — AADHAAR CARD", label: "Aadhaar Card", icon: CreditCard },
-    { id: "pan", stepNumber: 3, title: "STEP 3 — PAN CARD", label: "PAN Card", icon: CreditCard },
-    { id: "driving_licence", stepNumber: 4, title: "STEP 4 — DRIVING LICENCE", label: "Driving Licence", icon: FileText },
-    { id: "address_proof", stepNumber: 5, title: "STEP 5 — ADDRESS PROOF", label: "Address Proof", icon: MapPin }
+    { id: "profile", stepNumber: 1, title: "STEP 1 — PROFILE PHOTO", label: "Profile", icon: User },
+    { id: "aadhaar", stepNumber: 2, title: "STEP 2 — AADHAAR CARD", label: "Aadhaar", icon: CreditCard },
+    { id: "pan", stepNumber: 3, title: "STEP 3 — PAN CARD", label: "PAN", icon: IdCard },
+    { id: "driving_licence", stepNumber: 4, title: "STEP 4 — DRIVING LICENCE", label: "Licence", icon: FileText },
+    { id: "address_proof", stepNumber: 5, title: "STEP 5 — ADDRESS PROOF", label: "Address", icon: MapPin },
+    { id: "bank_passbook", stepNumber: 6, title: "STEP 6 — BANK PASSBOOK", label: "Bank", icon: Landmark }
   ];
 
   const handleImageUpload = (
@@ -158,6 +167,8 @@ export default function OnboardingScreen({
     } else if (step === "address_proof") {
       if (!addressText.trim()) return "Address Proof text/address field is required.";
       if (!addressPhoto) return "Address Proof Photo is required.";
+    } else if (step === "bank_passbook") {
+      if (!bankPhoto) return "Bank Passbook Photo is required.";
     }
     return null;
   };
@@ -176,12 +187,24 @@ export default function OnboardingScreen({
     else if (currentStep === "aadhaar") setCurrentStep("pan");
     else if (currentStep === "pan") setCurrentStep("driving_licence");
     else if (currentStep === "driving_licence") setCurrentStep("address_proof");
+    else if (currentStep === "address_proof") setCurrentStep("bank_passbook");
+  };
+
+  const handlePrevious = () => {
+    setError("");
+    setSuccessMessage("");
+    if (currentStep === "bank_passbook") setCurrentStep("address_proof");
+    else if (currentStep === "address_proof") setCurrentStep("driving_licence");
+    else if (currentStep === "driving_licence") setCurrentStep("pan");
+    else if (currentStep === "pan") setCurrentStep("aadhaar");
+    else if (currentStep === "aadhaar") setCurrentStep("profile");
+    else onBackToLogin();
   };
 
   const handleStepClick = (targetStep: OnboardingStep) => {
     setError("");
     setSuccessMessage("");
-    const stepsSequence: OnboardingStep[] = ["profile", "aadhaar", "pan", "driving_licence", "address_proof"];
+    const stepsSequence: OnboardingStep[] = ["profile", "aadhaar", "pan", "driving_licence", "address_proof", "bank_passbook"];
     const targetIdx = stepsSequence.indexOf(targetStep);
     const currentIdx = stepsSequence.indexOf(currentStep);
 
@@ -211,8 +234,8 @@ export default function OnboardingScreen({
     setError("");
     setSuccessMessage("");
 
-    // Validate all 5 steps
-    const stepsSequence: OnboardingStep[] = ["profile", "aadhaar", "pan", "driving_licence", "address_proof"];
+    // Validate all 6 steps
+    const stepsSequence: OnboardingStep[] = ["profile", "aadhaar", "pan", "driving_licence", "address_proof", "bank_passbook"];
     for (const step of stepsSequence) {
       const stepErr = checkStepValidation(step);
       if (stepErr) {
@@ -227,6 +250,7 @@ export default function OnboardingScreen({
       phone: mobileNumber.replace(/\D/g, "").slice(-10),
       email: "",
       etmId: etmId.trim().toUpperCase(),
+      driverId: driverId,
       aadhaarNo: aadhaarNo.replace(/\s/g, ""),
       panNo: panNo.toUpperCase().trim(),
       dlNo: dlNo.toUpperCase().trim(),
@@ -243,7 +267,7 @@ export default function OnboardingScreen({
         dlPhoto: dlPhoto || "",
         dlBackPhoto: dlBackPhoto || "",
         addressPhoto: addressPhoto || "",
-        bankPhoto: "",
+        bankPhoto: bankPhoto || "",
         policePhoto: ""
       }
     });
@@ -251,7 +275,7 @@ export default function OnboardingScreen({
     if (response.success) {
       setSuccessMessage(response.message || "Documents submitted successfully. Verification status: Pending.");
     } else {
-      setError(response.message || "Document upload failed. Your documents were not saved. Please try again.");
+      setError(response.message || "Documents could not be saved. Please try again.");
     }
   };
 
@@ -271,10 +295,10 @@ export default function OnboardingScreen({
             <Lock className="w-5 h-5 text-amber-400 shrink-0" />
             <div>
               <p className="text-xs font-black text-amber-300 uppercase tracking-wider">
-                Document Locked
+                Documents Locked
               </p>
               <p className="text-[10px] text-amber-200/90 font-semibold leading-tight">
-                Your documents have already been submitted successfully. To update any document, please contact the Admin.
+                Your documents have already been submitted successfully. Verification status: Pending.
               </p>
             </div>
           </div>
@@ -287,13 +311,7 @@ export default function OnboardingScreen({
       {/* Header Bar */}
       <div className="px-4 pt-[calc(1rem+env(safe-area-inset-top,0px))] pb-4 border-b border-slate-800 flex items-center justify-between bg-[#0C1E35] sticky top-0 z-40 shrink-0">
         <button
-          onClick={() => {
-            if (currentStep === "address_proof") setCurrentStep("driving_licence");
-            else if (currentStep === "driving_licence") setCurrentStep("pan");
-            else if (currentStep === "pan") setCurrentStep("aadhaar");
-            else if (currentStep === "aadhaar") setCurrentStep("profile");
-            else onBackToLogin();
-          }}
+          onClick={handlePrevious}
           disabled={isSubmitting}
           className="p-1.5 rounded-full hover:bg-slate-800 text-amber-200 transition-colors disabled:opacity-50"
         >
@@ -301,16 +319,16 @@ export default function OnboardingScreen({
         </button>
         <div className="text-center flex-1 pr-6">
           <h2 className="text-sm font-black tracking-widest text-[#D5A144] uppercase font-sans">
-            New Driver Onboarding
+            Driver Onboarding
           </h2>
           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
-            {activeStepObj?.title} ({activeStepObj?.stepNumber} of 5)
+            {activeStepObj?.title} ({activeStepObj?.stepNumber} of 6)
           </p>
         </div>
       </div>
 
-      {/* Step Tracker (1 to 5) */}
-      <div className="px-4 py-3 bg-[#0A1A2E] border-b border-slate-800/80 flex justify-between items-center shrink-0 overflow-x-auto no-scrollbar">
+      {/* Step Tracker (1 to 6) */}
+      <div className="px-3 py-3 bg-[#0A1A2E] border-b border-slate-800/80 flex justify-between items-center shrink-0 overflow-x-auto no-scrollbar gap-1">
         {stepsList.map((st, sIdx) => {
           const isCompleted = stepsList.findIndex(s => s.id === currentStep) > sIdx;
           const isActive = currentStep === st.id;
@@ -332,13 +350,13 @@ export default function OnboardingScreen({
                 >
                   {isCompleted ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : st.stepNumber}
                 </div>
-                <span className={`text-[9px] font-bold mt-1 tracking-tight ${isActive ? "text-amber-300" : "text-slate-500"}`}>
-                  Step {st.stepNumber}
+                <span className={`text-[8.5px] font-bold mt-1 tracking-tight ${isActive ? "text-amber-300" : "text-slate-500"}`}>
+                  {st.label}
                 </span>
               </div>
               {sIdx < stepsList.length - 1 && (
                 <div
-                  className={`flex-1 h-0.5 min-w-[12px] mx-1 rounded-full transition-all duration-500 ${
+                  className={`flex-1 h-0.5 min-w-[8px] mx-0.5 rounded-full transition-all duration-500 ${
                     stepsList.findIndex(s => s.id === currentStep) > sIdx
                       ? "bg-[#00C853]"
                       : "bg-slate-800"
@@ -377,7 +395,41 @@ export default function OnboardingScreen({
       </AnimatePresence>
 
       {/* Main Content Form */}
-      <div className="flex-1 p-5 overflow-y-auto">
+      <div className="flex-1 p-4 sm:p-5 overflow-y-auto">
+        {/* AUTOMATIC DRIVER INFORMATION CARD */}
+        <div className="mb-4 bg-[#0C1E35] p-4 rounded-2xl border border-slate-800 space-y-3">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-amber-400" />
+              <h4 className="text-[11px] font-black text-amber-300 uppercase tracking-widest">
+                Driver Registration Details
+              </h4>
+            </div>
+            <span className="text-[9px] bg-amber-400/10 text-amber-300 font-bold px-2 py-0.5 rounded border border-amber-400/20">
+              Verified User
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2.5 text-xs">
+            <div className="bg-[#08182D] p-2.5 rounded-xl border border-slate-800">
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Driver ID</p>
+              <p className="font-extrabold text-amber-200 truncate">{driverId}</p>
+            </div>
+            <div className="bg-[#08182D] p-2.5 rounded-xl border border-slate-800">
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">ETM ID</p>
+              <p className="font-extrabold text-amber-200 truncate">{etmId || "N/A"}</p>
+            </div>
+            <div className="bg-[#08182D] p-2.5 rounded-xl border border-slate-800">
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Driver Name</p>
+              <p className="font-extrabold text-slate-200 truncate">{driverName || "Driver"}</p>
+            </div>
+            <div className="bg-[#08182D] p-2.5 rounded-xl border border-slate-800">
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Mobile Number</p>
+              <p className="font-extrabold text-slate-200 truncate">{mobileNumber}</p>
+            </div>
+          </div>
+        </div>
+
         <AnimatePresence mode="wait">
           {/* STEP 1 — PROFILE PHOTO */}
           {currentStep === "profile" && (
@@ -388,55 +440,6 @@ export default function OnboardingScreen({
               exit={{ opacity: 0, x: -20 }}
               className="space-y-4"
             >
-              {/* Driver Details Card */}
-              <div className="bg-[#0C1E35] p-5 rounded-2xl border border-slate-800 space-y-3.5">
-                <h4 className="text-[11px] font-black text-amber-300 uppercase tracking-widest">
-                  Driver Information
-                </h4>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1">
-                    Driver Full Name
-                  </label>
-                  <input
-                    type="text"
-                    value={driverName}
-                    onChange={(e) => !isLocked && setDriverName(e.target.value)}
-                    readOnly={isLocked}
-                    placeholder="Enter Full Name"
-                    className={`w-full bg-[#08182D] border border-slate-700/60 rounded-xl py-2.5 px-3 text-xs font-bold focus:outline-none focus:border-amber-400 ${isLocked ? "opacity-80 cursor-not-allowed" : ""}`}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1">
-                      Mobile Number *
-                    </label>
-                    <input
-                      type="tel"
-                      maxLength={10}
-                      value={mobileNumber}
-                      onChange={(e) => !isLocked && setMobileNumber(e.target.value.replace(/\D/g, ""))}
-                      readOnly={isLocked}
-                      placeholder="10-digit Mobile"
-                      className={`w-full bg-[#08182D] border border-slate-700/60 rounded-xl py-2.5 px-3 text-xs font-bold focus:outline-none focus:border-amber-400 ${isLocked ? "opacity-80 cursor-not-allowed" : ""}`}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1">
-                      ETM ID *
-                    </label>
-                    <input
-                      type="text"
-                      value={etmId}
-                      onChange={(e) => !isLocked && setEtmId(e.target.value.toUpperCase())}
-                      readOnly={isLocked}
-                      placeholder="e.g. 102 / SSK102"
-                      className={`w-full bg-[#08182D] border border-slate-700/60 rounded-xl py-2.5 px-3 text-xs font-bold uppercase focus:outline-none focus:border-amber-400 ${isLocked ? "opacity-80 cursor-not-allowed" : ""}`}
-                    />
-                  </div>
-                </div>
-              </div>
-
               <div className="bg-[#0C1E35] p-5 rounded-2xl border border-slate-800">
                 <h3 className="text-xs font-black text-amber-300 uppercase tracking-widest mb-1 flex items-center justify-between">
                   <span>STEP 1 — PROFILE PHOTO *</span>
@@ -738,6 +741,63 @@ export default function OnboardingScreen({
               </div>
             </motion.div>
           )}
+
+          {/* STEP 6 — BANK PASSBOOK */}
+          {currentStep === "bank_passbook" && (
+            <motion.div
+              key="bank_passbook"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="space-y-4"
+            >
+              <div className="bg-[#0C1E35] p-5 rounded-2xl border border-slate-800">
+                <h3 className="text-xs font-black text-amber-300 uppercase tracking-widest mb-1">
+                  STEP 6 — BANK PASSBOOK
+                </h3>
+                <p className="text-slate-400 text-[11px] font-medium leading-relaxed mb-4">
+                  Upload a clear photo or copy of your Bank Passbook or cancelled cheque displaying account details for driver payouts.
+                </p>
+
+                {/* Bank Passbook Photo */}
+                {bankPhoto ? (
+                  <div className="space-y-3">
+                    <div className="relative aspect-video max-w-sm mx-auto rounded-xl overflow-hidden border-2 border-amber-400/50 shadow-xl group">
+                      <img src={bankPhoto} alt="Bank Passbook" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setPreviewImage({ url: bankPhoto, title: "Bank Passbook Photo" })}
+                        className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-bold gap-1.5 transition-opacity"
+                      >
+                        <Eye className="w-4 h-4" /> Preview Passbook
+                      </button>
+                    </div>
+                    {!isLocked && (
+                      <div className="text-center">
+                        <label className="text-[10px] text-amber-400 font-bold uppercase tracking-wider underline cursor-pointer">
+                          Change Bank Passbook Photo
+                          <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, setBankPhoto)} />
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <label className="border-2 border-dashed border-slate-700 rounded-2xl p-8 flex flex-col items-center justify-center bg-[#08182D]/60 hover:border-amber-400/50 transition-colors cursor-pointer">
+                    <div className="w-14 h-14 rounded-full bg-amber-400/10 flex items-center justify-center text-amber-400 mb-3">
+                      <Landmark className="w-7 h-7" />
+                    </div>
+                    <span className="text-xs font-bold text-slate-200 mb-1">Upload Bank Passbook Photo *</span>
+                    <span className="text-[10px] text-slate-400 text-center mb-4 max-w-xs">Clear image of passbook front page with Account Number & IFSC Code visible.</span>
+                    <span className="bg-gradient-to-r from-amber-400 to-[#D5A144] text-[#08182D] text-xs font-black uppercase px-5 py-2.5 rounded-xl cursor-pointer shadow-md hover:brightness-110 transition-all flex items-center gap-2">
+                      <UploadCloud className="w-4 h-4" />
+                      <span>Browse Passbook Photo</span>
+                      <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, setBankPhoto)} disabled={isLocked} />
+                    </span>
+                  </label>
+                )}
+              </div>
+            </motion.div>
+          )}
         </AnimatePresence>
       </div>
 
@@ -746,12 +806,7 @@ export default function OnboardingScreen({
         {currentStep !== "profile" && (
           <button
             type="button"
-            onClick={() => {
-              if (currentStep === "address_proof") setCurrentStep("driving_licence");
-              else if (currentStep === "driving_licence") setCurrentStep("pan");
-              else if (currentStep === "pan") setCurrentStep("aadhaar");
-              else if (currentStep === "aadhaar") setCurrentStep("profile");
-            }}
+            onClick={handlePrevious}
             disabled={isSubmitting}
             className="flex-1 bg-slate-800 border border-slate-700 text-amber-300 rounded-xl py-3 text-xs font-extrabold uppercase hover:bg-slate-700 transition-colors"
           >
@@ -767,7 +822,7 @@ export default function OnboardingScreen({
         ) : (
           <button
             type="button"
-            onClick={currentStep === "address_proof" ? handleSubmitForm : validateAndNext}
+            onClick={currentStep === "bank_passbook" ? handleSubmitForm : validateAndNext}
             disabled={isSubmitting}
             className="flex-2 bg-gradient-to-r from-amber-400 to-[#D5A144] text-[#08182D] rounded-xl py-3 text-xs font-black uppercase flex items-center justify-center gap-1.5 shadow-md hover:brightness-110 transition-all"
           >
@@ -776,10 +831,10 @@ export default function OnboardingScreen({
                 <Loader2 className="w-4 h-4 animate-spin" />
                 <span>Saving Documents...</span>
               </>
-            ) : currentStep === "address_proof" ? (
+            ) : currentStep === "bank_passbook" ? (
               <>
                 <CheckCircle className="w-4.5 h-4.5" />
-                <span>SUBMIT / SAVE DOCUMENTS</span>
+                <span>SUBMIT DOCUMENTS</span>
               </>
             ) : (
               <>

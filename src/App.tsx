@@ -884,7 +884,8 @@ export default function App() {
           dlBack: data.documents.dlBackPhoto,
           dlNumber: data.dlNo,
           addressText: data.addressText,
-          addressPhoto: data.documents.addressPhoto
+          addressPhoto: data.documents.addressPhoto,
+          bankPassbook: data.documents.bankPhoto
         },
         currentToken
       );
