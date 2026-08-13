@@ -11,19 +11,18 @@ import {
   SlidersHorizontal,
   Upload,
   Edit2,
-  Save,
   Check,
   Lock,
-  ShieldAlert,
   History,
   ChevronLeft,
   ChevronRight,
   FileText,
-  AlertTriangle
+  AlertTriangle,
+  Filter
 } from "lucide-react";
 import { DriverDetails } from "../../types";
 import { fetchHissabSummarySheet } from "../../lib/sheets";
-import { updateHissabSummaryCell, insertHissabSummaryRecordsAtTop } from "../../lib/googleSheets";
+import { updateHissabSummaryCell, insertHissabSummaryRecordsAtTop, getColumnLetter } from "../../lib/googleSheets";
 
 interface AdminHissabSummaryProps {
   accessToken?: string | null;
@@ -31,7 +30,7 @@ interface AdminHissabSummaryProps {
 }
 
 interface RowRecord {
-  sheetRowIndex: number; // 1-based index in Google Sheet
+  sheetRowIndex: number; // 1-based index in Google Sheet (Header = 1, First Data Row = 2)
   values: string[];
 }
 
@@ -46,7 +45,121 @@ interface AuditLog {
 }
 
 /**
- * Format date display safely without altering raw value
+ * EXACT 39 Headers of the Hissab Summary Google Sheet
+ */
+export const EXPECTED_HISSAB_SUMMARY_HEADERS = [
+  "Car Number",
+  "Car Model",
+  "Start Date",
+  "End Date",
+  "Days",
+  "Lease Amount",
+  "Rental Amount",
+  "Insurance Cover",
+  "Partner ETM",
+  "Partner Name",
+  "ETM ID",
+  "Driver Name",
+  "Uber Rev",
+  "Uber Cash",
+  "Uber Toll",
+  "Regulatory Adjustment",
+  "Driver Tip",
+  "Acceptance Rate",
+  "Cancellation Rate",
+  "Online Hours",
+  "Uber Trips",
+  "Uber Incentive",
+  "QC Incentive",
+  "Penalty",
+  "RTO Fine",
+  "Double Driver Charge",
+  "Adjustment",
+  "Half day adj",
+  "Repair adj",
+  "Servicing adj",
+  "Ola Security",
+  "Ola Bank Transfer",
+  "Ola toll adj",
+  "Ola Starting Balance",
+  "Ola Ending Balance",
+  "ND Penalty",
+  "Kuber Amount",
+  "Car QR Code Amount",
+  "OS"
+];
+
+/**
+ * Editable Financial Columns (Numeric Values Only)
+ */
+export const EDITABLE_FINANCIAL_COLUMNS = new Set([
+  "Lease Amount",
+  "Rental Amount",
+  "Insurance Cover",
+  "Uber Rev",
+  "Uber Cash",
+  "Uber Toll",
+  "Regulatory Adjustment",
+  "Driver Tip",
+  "Uber Incentive",
+  "QC Incentive",
+  "Penalty",
+  "RTO Fine",
+  "Double Driver Charge",
+  "Adjustment",
+  "Half day adj",
+  "Repair adj",
+  "Servicing adj",
+  "Ola Security",
+  "Ola Bank Transfer",
+  "Ola toll adj",
+  "Ola Starting Balance",
+  "Ola Ending Balance",
+  "ND Penalty",
+  "Kuber Amount",
+  "Car QR Code Amount",
+  "OS"
+]);
+
+/**
+ * Normalizes dates for comparison (DD/MM/YYYY or YYYY-MM-DD to standard DD/MM/YYYY)
+ */
+function normalizeDateStr(rawStr: any): string {
+  if (!rawStr) return "";
+  const s = String(rawStr).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    const parts = s.split("T")[0].split("-");
+    return `${parts[2].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[0]}`;
+  }
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}/.test(s)) {
+    const parts = s.split("/");
+    return `${parts[0].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[2]}`;
+  }
+  return s.toLowerCase();
+}
+
+/**
+ * Constructs a unique matching key for a row: Car Number + Start Date + End Date + ETM ID
+ */
+function buildRecordKey(rowValues: string[], headers: string[]): string {
+  if (!rowValues || !headers || headers.length === 0) return "";
+
+  const getColVal = (name: string) => {
+    const idx = headers.findIndex((h) => h.trim().toLowerCase() === name.trim().toLowerCase());
+    return idx >= 0 && rowValues[idx] !== undefined ? String(rowValues[idx]).trim() : "";
+  };
+
+  const carNum = getColVal("Car Number").toUpperCase();
+  const startDate = normalizeDateStr(getColVal("Start Date"));
+  const endDate = normalizeDateStr(getColVal("End Date"));
+  const etmId = getColVal("ETM ID").toUpperCase();
+
+  if (!carNum && !startDate && !endDate && !etmId) return "";
+  return `${carNum}|${startDate}|${endDate}|${etmId}`;
+}
+
+/**
+ * Format cell display safely for the UI
  */
 function formatCellDisplay(val: any): string {
   if (val === null || val === undefined) return "-";
@@ -67,37 +180,7 @@ function formatCellDisplay(val: any): string {
 }
 
 /**
- * Identify if a column is a financial / amount column
- */
-function isAmountHeader(headerName: string): boolean {
-  if (!headerName) return false;
-  const h = headerName.toLowerCase();
-  return (
-    h.includes("amount") ||
-    h.includes("hissab") ||
-    h.includes("earning") ||
-    h.includes("payout") ||
-    h.includes("net") ||
-    h.includes("total") ||
-    h.includes("incentive") ||
-    h.includes("penalty") ||
-    h.includes("deduction") ||
-    h.includes("fuel") ||
-    h.includes("advance") ||
-    h.includes("balance") ||
-    h.includes("outstanding") ||
-    h.includes("rent") ||
-    h.includes("pay") ||
-    h.includes("fare") ||
-    h.includes("charge") ||
-    h.includes("fine") ||
-    h.includes("collection") ||
-    h.includes("cash")
-  );
-}
-
-/**
- * Simple CSV parser handling quotes and commas
+ * Simple CSV parser supporting quoted commas and linebreaks
  */
 function parseCsvContent(text: string): string[][] {
   const lines: string[][] = [];
@@ -112,7 +195,7 @@ function parseCsvContent(text: string): string[][] {
     if (char === '"') {
       if (insideQuotes && nextChar === '"') {
         currentVal += '"';
-        i++; // skip escaped quote
+        i++;
       } else {
         insideQuotes = !insideQuotes;
       }
@@ -124,7 +207,7 @@ function parseCsvContent(text: string): string[][] {
         i++;
       }
       currentRow.push(currentVal.trim());
-      if (currentRow.some(c => c !== "")) {
+      if (currentRow.some((c) => c !== "")) {
         lines.push(currentRow);
       }
       currentRow = [];
@@ -136,7 +219,7 @@ function parseCsvContent(text: string): string[][] {
 
   if (currentVal || currentRow.length > 0) {
     currentRow.push(currentVal.trim());
-    if (currentRow.some(c => c !== "")) {
+    if (currentRow.some((c) => c !== "")) {
       lines.push(currentRow);
     }
   }
@@ -153,22 +236,24 @@ export default function AdminHissabSummary({
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Search & Filter
-  const [searchTerm, setSearchTerm] = useState<string>("");
-  const [selectedColumnFilter, setSelectedColumnFilter] = useState<{ colIndex: number; value: string }>({
-    colIndex: -1,
-    value: "all"
-  });
+  // Search & Specific Filters
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [filterDriverName, setFilterDriverName] = useState<string>("all");
+  const [filterEtmId, setFilterEtmId] = useState<string>("all");
+  const [filterCarNumber, setFilterCarNumber] = useState<string>("all");
+  const [filterDate, setFilterDate] = useState<string>("");
+  const [filterPartnerEtm, setFilterPartnerEtm] = useState<string>("all");
+  const [filterPartnerName, setFilterPartnerName] = useState<string>("all");
 
   // Pagination
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [itemsPerPage, setItemsPerPage] = useState<number>(25);
 
-  // Sync state
+  // Sync Metadata
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const [expandedMobileRowIndex, setExpandedMobileRowIndex] = useState<number | null>(null);
 
-  // Inline Cell Editing
+  // Inline Financial Cell Editing
   const [editingCell, setEditingCell] = useState<{
     sheetRowIndex: number;
     colIndex: number;
@@ -178,7 +263,7 @@ export default function AdminHissabSummary({
   } | null>(null);
   const [isSavingCell, setIsSavingCell] = useState<boolean>(false);
 
-  // Notifications / Toast
+  // Notifications
   const [toast, setToast] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // Audit Log
@@ -194,13 +279,14 @@ export default function AdminHissabSummary({
   const [missingHeaders, setMissingHeaders] = useState<string[]>([]);
   const [extraHeaders, setExtraHeaders] = useState<string[]>([]);
   const [duplicateCount, setDuplicateCount] = useState<number>(0);
-  const [duplicateStrategy, setDuplicateStrategy] = useState<"skip" | "insert_all">("skip");
+  const [newRecordCount, setNewRecordCount] = useState<number>(0);
+  const [duplicateStrategy, setDuplicateStrategy] = useState<"update" | "skip" | "insert_all">("update");
   const [isUploadingCsv, setIsUploadingCsv] = useState<boolean>(false);
   const [csvUploadMessage, setCsvUploadMessage] = useState<string>("");
 
-  // Check permissions (Admin/Super Admin only)
+  // Permissions check
   const isUserAuthorized = useMemo(() => {
-    if (!currentAdminDriver) return true; // Default admin mode inside Admin Panel
+    if (!currentAdminDriver) return true;
     const role = (currentAdminDriver.role || currentAdminDriver.Role || currentAdminDriver.User_Type || "").toLowerCase();
     const permissions = (currentAdminDriver.Permissions || "").toLowerCase();
     if (role.includes("viewer") || permissions.includes("read_only") || permissions.includes("view_only")) {
@@ -209,7 +295,7 @@ export default function AdminHissabSummary({
     return true;
   }, [currentAdminDriver]);
 
-  // Load data directly from Google Sheet "Hissab Summary" ONLY
+  // Load data directly from Google Sheet tab "Hissab Summary" ONLY
   const loadData = async (forceRefresh = false) => {
     if (forceRefresh) {
       setIsRefreshing(true);
@@ -220,7 +306,7 @@ export default function AdminHissabSummary({
 
     try {
       const sheetData = await fetchHissabSummarySheet(accessToken, forceRefresh);
-      if (Array.isArray(sheetData)) {
+      if (Array.isArray(sheetData) && sheetData.length > 0) {
         setRawRows(sheetData);
       } else {
         setRawRows([]);
@@ -228,7 +314,7 @@ export default function AdminHissabSummary({
       setLastRefreshed(new Date());
     } catch (err: any) {
       console.error("Error loading Google Sheet 'Hissab Summary':", err);
-      setError("Unable to load Hissab Summary. Please check the Google Sheet connection and try again.");
+      setError("Unable to load Hissab Summary from Google Sheet. Please try Sync / Refresh.");
       setRawRows([]);
     } finally {
       setLoading(false);
@@ -239,7 +325,7 @@ export default function AdminHissabSummary({
   useEffect(() => {
     loadData(false);
 
-    // Auto refresh periodically every 2 minutes
+    // Refresh every 2 minutes
     const interval = setInterval(() => {
       loadData(true);
     }, 120000);
@@ -247,32 +333,36 @@ export default function AdminHissabSummary({
     return () => clearInterval(interval);
   }, [accessToken]);
 
-  // Show Toast Auto Dismiss
+  // Toast Auto Dismiss
   useEffect(() => {
     if (toast) {
       const timer = setTimeout(() => {
         setToast(null);
-      }, 4000);
+      }, 5000);
       return () => clearTimeout(timer);
     }
   }, [toast]);
 
-  // Extract Row 1 as Headers
+  // Active headers loaded from Google Sheet or fallback to EXPECTED_HISSAB_SUMMARY_HEADERS
   const headers = useMemo(() => {
-    if (!rawRows || rawRows.length === 0) return [];
-    return rawRows[0].map((h) => (h ? String(h).trim() : ""));
+    if (!rawRows || rawRows.length === 0) return EXPECTED_HISSAB_SUMMARY_HEADERS;
+    const firstRow = rawRows[0].map((h) => (h ? String(h).trim() : ""));
+    // If first row has valid column names, use them; otherwise use EXPECTED_HISSAB_SUMMARY_HEADERS
+    if (firstRow.filter(Boolean).length > 0) {
+      return firstRow;
+    }
+    return EXPECTED_HISSAB_SUMMARY_HEADERS;
   }, [rawRows]);
 
-  // Map data rows preserving exact 1-based Google Sheet row index
+  // Data records preserving 1-based Google Sheet row index (Header = Row 1, Data Starts = Row 2)
   const dataRecords = useMemo<RowRecord[]>(() => {
     if (!rawRows || rawRows.length <= 1) return [];
     const list: RowRecord[] = [];
     for (let i = 1; i < rawRows.length; i++) {
       const rowArr = rawRows[i];
-      // Filter out completely blank rows
       if (rowArr && Array.isArray(rowArr) && rowArr.some((c) => c !== null && c !== undefined && String(c).trim() !== "")) {
         list.push({
-          sheetRowIndex: i + 1, // Google Sheet 1-based row index (Header = 1, Data Starts = 2)
+          sheetRowIndex: i + 1,
           values: rowArr
         });
       }
@@ -280,49 +370,121 @@ export default function AdminHissabSummary({
     return list;
   }, [rawRows]);
 
-  // Dynamic filterable columns
-  const filterableColumns = useMemo(() => {
-    if (!headers.length) return [];
-    return headers
-      .map((header, index) => {
-        const uniqueVals = Array.from(
-          new Set(
-            dataRecords
-              .map((r) => (r.values[index] ? String(r.values[index]).trim() : ""))
-              .filter((v) => v !== "")
-          )
-        );
-        return {
-          index,
-          name: header,
-          uniqueValues: uniqueVals
-        };
-      })
-      .filter((col) => col.uniqueValues.length > 1 && col.uniqueValues.length <= 60);
+  // Distinct filter options extracted dynamically
+  const filterOptions = useMemo(() => {
+    const getColIdx = (name: string) =>
+      headers.findIndex((h) => h.trim().toLowerCase() === name.trim().toLowerCase());
+
+    const driverNameIdx = getColIdx("Driver Name");
+    const etmIdIdx = getColIdx("ETM ID");
+    const carNumIdx = getColIdx("Car Number");
+    const partnerEtmIdx = getColIdx("Partner ETM");
+    const partnerNameIdx = getColIdx("Partner Name");
+
+    const getUnique = (colIdx: number) => {
+      if (colIdx < 0) return [];
+      const set = new Set<string>();
+      dataRecords.forEach((r) => {
+        const val = r.values[colIdx] ? String(r.values[colIdx]).trim() : "";
+        if (val) set.add(val);
+      });
+      return Array.from(set).sort();
+    };
+
+    return {
+      driverNames: getUnique(driverNameIdx),
+      etmIds: getUnique(etmIdIdx),
+      carNumbers: getUnique(carNumIdx),
+      partnerEtms: getUnique(partnerEtmIdx),
+      partnerNames: getUnique(partnerNameIdx)
+    };
   }, [headers, dataRecords]);
 
-  // Filtered rows
+  // Filter records based on search and specific column filters
   const filteredRecords = useMemo(() => {
     let result = dataRecords;
 
-    if (searchTerm.trim()) {
-      const q = searchTerm.toLowerCase().trim();
+    const getColIdx = (name: string) =>
+      headers.findIndex((h) => h.trim().toLowerCase() === name.trim().toLowerCase());
+
+    const driverNameIdx = getColIdx("Driver Name");
+    const etmIdIdx = getColIdx("ETM ID");
+    const carNumIdx = getColIdx("Car Number");
+    const startDateIdx = getColIdx("Start Date");
+    const endDateIdx = getColIdx("End Date");
+    const partnerEtmIdx = getColIdx("Partner ETM");
+    const partnerNameIdx = getColIdx("Partner Name");
+
+    // Global Search Query
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
       result = result.filter((rec) =>
         rec.values.some((cell) => cell !== null && cell !== undefined && String(cell).toLowerCase().includes(q))
       );
     }
 
-    if (selectedColumnFilter.colIndex >= 0 && selectedColumnFilter.value !== "all") {
+    // Driver Name Filter
+    if (filterDriverName !== "all" && driverNameIdx >= 0) {
       result = result.filter((rec) => {
-        const val = rec.values[selectedColumnFilter.colIndex]
-          ? String(rec.values[selectedColumnFilter.colIndex]).trim()
-          : "";
-        return val.toLowerCase() === selectedColumnFilter.value.toLowerCase();
+        const val = rec.values[driverNameIdx] ? String(rec.values[driverNameIdx]).trim() : "";
+        return val.toLowerCase() === filterDriverName.toLowerCase();
+      });
+    }
+
+    // ETM ID Filter
+    if (filterEtmId !== "all" && etmIdIdx >= 0) {
+      result = result.filter((rec) => {
+        const val = rec.values[etmIdIdx] ? String(rec.values[etmIdIdx]).trim() : "";
+        return val.toLowerCase() === filterEtmId.toLowerCase();
+      });
+    }
+
+    // Car Number Filter
+    if (filterCarNumber !== "all" && carNumIdx >= 0) {
+      result = result.filter((rec) => {
+        const val = rec.values[carNumIdx] ? String(rec.values[carNumIdx]).trim() : "";
+        return val.toLowerCase() === filterCarNumber.toLowerCase();
+      });
+    }
+
+    // Date Filter (matches Start Date or End Date)
+    if (filterDate.trim()) {
+      const qDate = filterDate.trim().toLowerCase();
+      result = result.filter((rec) => {
+        const startVal = startDateIdx >= 0 && rec.values[startDateIdx] ? String(rec.values[startDateIdx]).trim().toLowerCase() : "";
+        const endVal = endDateIdx >= 0 && rec.values[endDateIdx] ? String(rec.values[endDateIdx]).trim().toLowerCase() : "";
+        return startVal.includes(qDate) || endVal.includes(qDate);
+      });
+    }
+
+    // Partner ETM Filter
+    if (filterPartnerEtm !== "all" && partnerEtmIdx >= 0) {
+      result = result.filter((rec) => {
+        const val = rec.values[partnerEtmIdx] ? String(rec.values[partnerEtmIdx]).trim() : "";
+        return val.toLowerCase() === filterPartnerEtm.toLowerCase();
+      });
+    }
+
+    // Partner Name Filter
+    if (filterPartnerName !== "all" && partnerNameIdx >= 0) {
+      result = result.filter((rec) => {
+        const val = rec.values[partnerNameIdx] ? String(rec.values[partnerNameIdx]).trim() : "";
+        return val.toLowerCase() === filterPartnerName.toLowerCase();
       });
     }
 
     return result;
-  }, [dataRecords, searchTerm, selectedColumnFilter]);
+  }, [
+    dataRecords,
+    headers,
+    searchQuery,
+    filterDriverName,
+    filterEtmId,
+    filterCarNumber,
+    filterDate,
+    filterPartnerEtm,
+    filterPartnerName
+  ]);
 
   // Pagination calculation
   const totalPages = Math.ceil(filteredRecords.length / itemsPerPage) || 1;
@@ -331,34 +493,62 @@ export default function AdminHissabSummary({
     return filteredRecords.slice(start, start + itemsPerPage);
   }, [filteredRecords, currentPage, itemsPerPage]);
 
-  // Reset page when search or filter changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedColumnFilter, itemsPerPage]);
+  }, [
+    searchQuery,
+    filterDriverName,
+    filterEtmId,
+    filterCarNumber,
+    filterDate,
+    filterPartnerEtm,
+    filterPartnerName,
+    itemsPerPage
+  ]);
 
-  // Handle Save Amount Edit to Google Sheet
+  // Handle Save Financial Value Edit to Google Sheet
   const handleSaveCellEdit = async () => {
     if (!editingCell) return;
+
+    const trimmedEditVal = editingCell.editValue.trim();
+
+    // Numeric Validation for financial amounts
+    if (trimmedEditVal !== "") {
+      const cleanNumStr = trimmedEditVal.replace(/,/g, "");
+      if (isNaN(Number(cleanNumStr))) {
+        setToast({
+          type: "error",
+          text: `Invalid amount entered for ${editingCell.colName}. Please enter a valid number.`
+        });
+        return;
+      }
+    }
+
+    // Store clean numeric string in Google Sheet (no currency symbols)
+    const valToWrite = trimmedEditVal === "" ? "" : String(Number(trimmedEditVal.replace(/,/g, "")));
+
     setIsSavingCell(true);
 
     try {
       await updateHissabSummaryCell(
         editingCell.sheetRowIndex,
         editingCell.colIndex,
-        editingCell.editValue,
+        valToWrite,
         accessToken
       );
 
-      // Update local state row ONLY after Google Sheet write succeeds
+      // Update local state row ONLY AFTER Google Sheet write succeeds
       setRawRows((prev) => {
         const next = [...prev];
-        const targetRow = [...(next[editingCell.sheetRowIndex - 1] || [])];
-        targetRow[editingCell.colIndex] = editingCell.editValue;
-        next[editingCell.sheetRowIndex - 1] = targetRow;
+        if (next[editingCell.sheetRowIndex - 1]) {
+          const targetRow = [...next[editingCell.sheetRowIndex - 1]];
+          targetRow[editingCell.colIndex] = valToWrite;
+          next[editingCell.sheetRowIndex - 1] = targetRow;
+        }
         return next;
       });
 
-      // Log Audit Entry
+      // Add to Audit Trail
       const newAudit: AuditLog = {
         id: Math.random().toString(36).substring(2, 9),
         timestamp: new Date().toLocaleString(),
@@ -366,7 +556,7 @@ export default function AdminHissabSummary({
         rowNumber: editingCell.sheetRowIndex,
         colName: editingCell.colName,
         prevVal: editingCell.currentValue,
-        newVal: editingCell.editValue
+        newVal: valToWrite
       };
       setAuditTrail((prev) => [newAudit, ...prev]);
 
@@ -377,10 +567,10 @@ export default function AdminHissabSummary({
 
       setEditingCell(null);
     } catch (err: any) {
-      console.error("Failed to update Google Sheet cell:", err);
+      console.error("Google Sheet write failed:", err);
       setToast({
         type: "error",
-        text: "Unable to save changes to Google Sheets. Please check your connection and try again."
+        text: "Unable to save changes to Google Sheet."
       });
     } finally {
       setIsSavingCell(false);
@@ -394,6 +584,7 @@ export default function AdminHissabSummary({
 
     setCsvFile(file);
     const reader = new FileReader();
+
     reader.onload = (event) => {
       const text = event.target?.result as string;
       if (!text) return;
@@ -404,25 +595,31 @@ export default function AdminHissabSummary({
         return;
       }
 
-      const rawCsvHeaders = parsed[0];
+      const rawCsvHeaders = parsed[0].map((h) => (h ? h.trim() : ""));
       const rawCsvData = parsed.slice(1);
 
       setCsvHeaders(rawCsvHeaders);
       setCsvRawRows(rawCsvData);
 
-      // Check header match against Google Sheet headers
-      const sheetHeaderNorm = headers.map((h) => h.toLowerCase().trim());
-      const csvHeaderNorm = rawCsvHeaders.map((h) => h.toLowerCase().trim());
+      // Use target sheet headers or EXPECTED_HISSAB_SUMMARY_HEADERS
+      const targetSheetHeaders = headers.length > 0 ? headers : EXPECTED_HISSAB_SUMMARY_HEADERS;
+      const csvHeaderNorms = rawCsvHeaders.map((h) => h.toLowerCase().trim());
 
-      const missing = headers.filter((h) => !csvHeaderNorm.includes(h.toLowerCase().trim()));
-      const extra = rawCsvHeaders.filter((h) => !sheetHeaderNorm.includes(h.toLowerCase().trim()));
+      // Validate required columns against exact EXPECTED_HISSAB_SUMMARY_HEADERS
+      const missing = EXPECTED_HISSAB_SUMMARY_HEADERS.filter(
+        (reqH) => !csvHeaderNorms.includes(reqH.toLowerCase().trim())
+      );
+
+      const extra = rawCsvHeaders.filter(
+        (csvH) => !targetSheetHeaders.some((sh) => sh.toLowerCase().trim() === csvH.toLowerCase().trim())
+      );
 
       setMissingHeaders(missing);
       setExtraHeaders(extra);
 
-      // Map CSV rows to match Google Sheet header column order exactly
+      // Map CSV rows to match target headers order exactly
       const mapped: string[][] = rawCsvData.map((csvRow) => {
-        return headers.map((sheetH) => {
+        return targetSheetHeaders.map((sheetH) => {
           const matchIdx = rawCsvHeaders.findIndex(
             (ch) => ch.trim().toLowerCase() === sheetH.trim().toLowerCase()
           );
@@ -435,76 +632,119 @@ export default function AdminHissabSummary({
 
       setCsvMappedRows(mapped);
 
-      // Duplicate check (by driver/etm/date/week or row string)
+      // Check duplicates using primary key: Car Number + Start Date + End Date + ETM ID
+      const existingKeySet = new Set<string>();
+      dataRecords.forEach((r) => {
+        const k = buildRecordKey(r.values, targetSheetHeaders);
+        if (k) existingKeySet.add(k);
+      });
+
       let dupes = 0;
-      const existingSignatures = new Set(
-        dataRecords.map((r) => r.values.map((v) => String(v).trim()).join("|"))
-      );
+      let newRecords = 0;
 
       mapped.forEach((mRow) => {
-        const sig = mRow.map((v) => String(v).trim()).join("|");
-        if (existingSignatures.has(sig)) {
+        const k = buildRecordKey(mRow, targetSheetHeaders);
+        if (k && existingKeySet.has(k)) {
           dupes++;
+        } else {
+          newRecords++;
         }
       });
 
       setDuplicateCount(dupes);
+      setNewRecordCount(newRecords);
     };
 
     reader.readAsText(file);
   };
 
-  // Handle Confirm CSV Upload (INSERT AT TOP)
+  // Handle Confirm CSV Upload
   const handleConfirmCsvUpload = async () => {
     if (!csvMappedRows.length) return;
+    if (missingHeaders.length > 0) {
+      setToast({
+        type: "error",
+        text: "Cannot upload CSV with missing required columns. Please check the missing headers list."
+      });
+      return;
+    }
+
     setIsUploadingCsv(true);
-    setCsvUploadMessage("Inserting new CSV records at TOP of Google Sheet 'Hissab Summary'...");
+    setCsvUploadMessage("Processing CSV upload to Google Sheet 'Hissab Summary'...");
 
     try {
-      // Filter out duplicates if duplicateStrategy is 'skip'
-      let rowsToInsert = csvMappedRows;
-      if (duplicateStrategy === "skip") {
-        const existingSignatures = new Set(
-          dataRecords.map((r) => r.values.map((v) => String(v).trim()).join("|"))
-        );
-        rowsToInsert = csvMappedRows.filter((mRow) => {
-          const sig = mRow.map((v) => String(v).trim()).join("|");
-          return !existingSignatures.has(sig);
-        });
-      }
+      const targetSheetHeaders = headers.length > 0 ? headers : EXPECTED_HISSAB_SUMMARY_HEADERS;
 
-      if (rowsToInsert.length === 0) {
-        setToast({ type: "error", text: "No new non-duplicate records to insert." });
-        setIsUploadingCsv(false);
-        return;
-      }
+      // Map existing records key to their row index in dataRecords array
+      const existingKeyMap = new Map<string, number>();
+      const existingDataRowsCopy = dataRecords.map((r) => [...r.values]);
 
-      // Existing data rows array (excluding header)
-      const existingDataRows = dataRecords.map((rec) => rec.values);
+      dataRecords.forEach((r, idx) => {
+        const k = buildRecordKey(r.values, targetSheetHeaders);
+        if (k) {
+          existingKeyMap.set(k, idx);
+        }
+      });
 
-      // Execute Google Sheet Range Write: Insert new rows at TOP (below Row 1 header)
+      const newRecordsToInsertAtTop: string[][] = [];
+      let updatedRecordsCount = 0;
+      let skippedRecordsCount = 0;
+      let insertedNewCount = 0;
+
+      csvMappedRows.forEach((csvRow) => {
+        const k = buildRecordKey(csvRow, targetSheetHeaders);
+
+        if (k && existingKeyMap.has(k)) {
+          // Record exists in current sheet data
+          if (duplicateStrategy === "update") {
+            const existingIdx = existingKeyMap.get(k)!;
+            const targetRow = [...existingDataRowsCopy[existingIdx]];
+
+            // Update matching row with non-empty CSV values
+            csvRow.forEach((val, cIdx) => {
+              if (val !== undefined && val !== null && String(val).trim() !== "") {
+                targetRow[cIdx] = val;
+              }
+            });
+
+            existingDataRowsCopy[existingIdx] = targetRow;
+            updatedRecordsCount++;
+          } else if (duplicateStrategy === "skip") {
+            skippedRecordsCount++;
+          } else {
+            // insert_all
+            newRecordsToInsertAtTop.push(csvRow);
+            insertedNewCount++;
+          }
+        } else {
+          // Genuinely new record
+          newRecordsToInsertAtTop.push(csvRow);
+          insertedNewCount++;
+        }
+      });
+
+      // Write combined matrix to Google Sheet: Header at Row 1, New records at TOP, Updated records below
       await insertHissabSummaryRecordsAtTop(
-        headers,
-        rowsToInsert,
-        existingDataRows,
+        targetSheetHeaders,
+        newRecordsToInsertAtTop,
+        existingDataRowsCopy,
         accessToken
       );
 
       setToast({
         type: "success",
-        text: `CSV uploaded successfully. ${rowsToInsert.length} new records added at the TOP of Hissab Summary.`
+        text: `CSV Upload Successful: ${insertedNewCount} new records added at top, ${updatedRecordsCount} existing records updated${skippedRecordsCount > 0 ? `, ${skippedRecordsCount} duplicates skipped` : ""}.`
       });
 
-      // Close modal and refresh live sheet data
       setShowCsvModal(false);
       setCsvFile(null);
       setCsvMappedRows([]);
       await loadData(true);
     } catch (err: any) {
-      console.error("CSV upload error:", err);
+      console.error("CSV Upload Google Sheet error:", err);
       setToast({
         type: "error",
-        text: "CSV upload failed. No existing Hissab Summary data was changed."
+        text: "Unable to save changes to Google Sheet."
       });
     } finally {
       setIsUploadingCsv(false);
@@ -519,8 +759,8 @@ export default function AdminHissabSummary({
         <div
           className={`fixed top-5 right-5 z-50 max-w-md p-4 rounded-2xl shadow-xl border flex items-center gap-3 transition-all animate-bounce-short ${
             toast.type === "success"
-              ? "bg-emerald-900/90 text-emerald-100 border-emerald-500/50 backdrop-blur-md"
-              : "bg-rose-900/90 text-rose-100 border-rose-500/50 backdrop-blur-md"
+              ? "bg-emerald-900/95 text-emerald-100 border-emerald-500/50 backdrop-blur-md"
+              : "bg-rose-900/95 text-rose-100 border-rose-500/50 backdrop-blur-md"
           }`}
         >
           {toast.type === "success" ? (
@@ -539,7 +779,7 @@ export default function AdminHissabSummary({
       )}
 
       {/* Header Banner */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200/80 dark:border-slate-800 shadow-xs transition-colors">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200/80 dark:border-slate-800 shadow-xs transition-colors space-y-5">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
           <div>
             <div className="flex items-center gap-2.5">
@@ -561,13 +801,13 @@ export default function AdminHissabSummary({
                   )}
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
-                  Single source of truth loaded directly from Google Sheet tab <span className="font-bold text-slate-700 dark:text-slate-300">"Hissab Summary"</span>
+                  Live data from Google Sheet → <span className="font-bold text-slate-700 dark:text-slate-300">Hissab Summary</span>
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Action Buttons & Sync Status */}
+          {/* Action Buttons */}
           <div className="flex items-center gap-2.5 flex-wrap">
             {lastRefreshed && (
               <span className="text-[11px] text-slate-400 dark:text-slate-500 font-medium hidden lg:inline-block mr-1">
@@ -575,12 +815,12 @@ export default function AdminHissabSummary({
               </span>
             )}
 
-            {/* Audit History Button */}
+            {/* Audit History */}
             {auditTrail.length > 0 && (
               <button
                 type="button"
                 onClick={() => setShowAuditModal(true)}
-                className="px-3.5 py-2 rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                className="px-3.5 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
               >
                 <History className="w-4 h-4 text-slate-500" />
                 <span>Audit Logs ({auditTrail.length})</span>
@@ -613,72 +853,127 @@ export default function AdminHissabSummary({
           </div>
         </div>
 
-        {/* Search & Filter Controls */}
-        <div className="pt-4 flex flex-col md:flex-row items-center justify-between gap-3">
-          {/* Search Input */}
-          <div className="relative w-full md:w-80">
-            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search Driver ID, ETM ID, Name, Vehicle, Date..."
-              className="w-full pl-9 pr-8 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            {searchTerm && (
-              <button
-                onClick={() => setSearchTerm("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
+        {/* Filters Grid Section */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-600 dark:text-slate-300">
+            <Filter className="w-3.5 h-3.5 text-blue-600" />
+            <span>Search & Specific Column Filters</span>
           </div>
 
-          {/* Dynamic Column Filter & Pagination Info */}
-          <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end">
-            {filterableColumns.length > 0 && (
-              <div className="flex items-center gap-2 w-full md:w-auto">
-                <SlidersHorizontal className="w-4 h-4 text-slate-400 shrink-0" />
-                <select
-                  value={
-                    selectedColumnFilter.colIndex >= 0
-                      ? `${selectedColumnFilter.colIndex}:${selectedColumnFilter.value}`
-                      : "all"
-                  }
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val === "all") {
-                      setSelectedColumnFilter({ colIndex: -1, value: "all" });
-                    } else {
-                      const [idxStr, ...vParts] = val.split(":");
-                      setSelectedColumnFilter({
-                        colIndex: Number(idxStr),
-                        value: vParts.join(":")
-                      });
-                    }
-                  }}
-                  className="px-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-full md:w-auto"
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-2.5">
+            {/* Global Search Input */}
+            <div className="relative lg:col-span-2">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search across all columns..."
+                className="w-full pl-8 pr-7 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                 >
-                  <option value="all">Filter by column...</option>
-                  {filterableColumns.map((col) =>
-                    col.uniqueValues.map((val) => (
-                      <option key={`${col.index}:${val}`} value={`${col.index}:${val}`}>
-                        {col.name}: {val}
-                      </option>
-                    ))
-                  )}
-                </select>
-              </div>
-            )}
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
 
-            {/* Total Row Count Badge */}
-            <div className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold shrink-0 flex items-center gap-1.5">
-              <span>Valid Rows:</span>
-              <span className="font-mono text-blue-600 dark:text-blue-400 font-extrabold">
+            {/* Filter by Driver Name */}
+            <div>
+              <select
+                value={filterDriverName}
+                onChange={(e) => setFilterDriverName(e.target.value)}
+                className="w-full px-2.5 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">Driver Name: All</option>
+                {filterOptions.driverNames.map((name) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Filter by ETM ID */}
+            <div>
+              <select
+                value={filterEtmId}
+                onChange={(e) => setFilterEtmId(e.target.value)}
+                className="w-full px-2.5 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">ETM ID: All</option>
+                {filterOptions.etmIds.map((etm) => (
+                  <option key={etm} value={etm}>{etm}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Filter by Car Number */}
+            <div>
+              <select
+                value={filterCarNumber}
+                onChange={(e) => setFilterCarNumber(e.target.value)}
+                className="w-full px-2.5 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">Car Number: All</option>
+                {filterOptions.carNumbers.map((car) => (
+                  <option key={car} value={car}>{car}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Filter by Date */}
+            <div>
+              <input
+                type="text"
+                value={filterDate}
+                onChange={(e) => setFilterDate(e.target.value)}
+                placeholder="Filter Date (DD/MM/YYYY)..."
+                className="w-full px-2.5 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            {/* Filter by Partner Name */}
+            <div>
+              <select
+                value={filterPartnerName}
+                onChange={(e) => setFilterPartnerName(e.target.value)}
+                className="w-full px-2.5 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">Partner: All</option>
+                {filterOptions.partnerNames.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between text-xs text-slate-500">
+            <div className="flex items-center gap-2">
+              <span className="font-medium">Active Records:</span>
+              <span className="font-mono font-extrabold text-blue-600 dark:text-blue-400">
                 {filteredRecords.length}
               </span>
+              <span>/ {dataRecords.length} total</span>
             </div>
+
+            {(searchQuery || filterDriverName !== "all" || filterEtmId !== "all" || filterCarNumber !== "all" || filterDate || filterPartnerEtm !== "all" || filterPartnerName !== "all") && (
+              <button
+                onClick={() => {
+                  setSearchQuery("");
+                  setFilterDriverName("all");
+                  setFilterEtmId("all");
+                  setFilterCarNumber("all");
+                  setFilterDate("");
+                  setFilterPartnerEtm("all");
+                  setFilterPartnerName("all");
+                }}
+                className="text-xs font-bold text-rose-600 hover:underline cursor-pointer"
+              >
+                Reset All Filters
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -689,9 +984,9 @@ export default function AdminHissabSummary({
           <div className="flex items-center gap-3">
             <AlertCircle className="w-6 h-6 text-rose-600 dark:text-rose-400 shrink-0" />
             <div>
-              <h4 className="text-sm font-extrabold">Connection Failed</h4>
+              <h4 className="text-sm font-extrabold">Connection Error</h4>
               <p className="text-xs font-medium text-rose-700 dark:text-rose-300 mt-0.5">
-                {error}
+                Unable to load Hissab Summary from Google Sheet. Please try Sync / Refresh.
               </p>
             </div>
           </div>
@@ -701,30 +996,25 @@ export default function AdminHissabSummary({
             onClick={() => loadData(true)}
             className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-colors shrink-0 cursor-pointer"
           >
-            Retry Connection
+            Sync / Refresh
           </button>
         </div>
       )}
 
-      {/* Main Content Table & Cards */}
+      {/* Main Table View */}
       {loading ? (
-        /* Loading Skeleton */
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-            <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded-md w-48 animate-pulse" />
-            <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded-md w-24 animate-pulse" />
-          </div>
+          <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded-md w-48 animate-pulse" />
           <div className="space-y-3">
             {[1, 2, 3, 4, 5, 6].map((idx) => (
               <div key={idx} className="h-10 bg-slate-100 dark:bg-slate-800/60 rounded-xl animate-pulse" />
             ))}
           </div>
           <p className="text-center text-xs font-bold text-slate-400 py-2">
-            Loading live data from Google Sheet "Hissab Summary"...
+            Loading live Hissab Summary data from Google Sheet...
           </p>
         </div>
       ) : dataRecords.length === 0 ? (
-        /* Empty State */
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-12 border border-slate-200/80 dark:border-slate-800 shadow-xs text-center">
           <div className="w-16 h-16 mx-auto rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 mb-4">
             <FileSpreadsheet className="w-8 h-8" />
@@ -733,7 +1023,7 @@ export default function AdminHissabSummary({
             No Hissab Summary data available.
           </h3>
           <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-            The Google Sheet tab <span className="font-semibold text-slate-600 dark:text-slate-300">"Hissab Summary"</span> does not contain any valid records.
+            The Google Sheet tab <span className="font-semibold text-slate-600 dark:text-slate-300">"Hissab Summary"</span> is empty or unavailable.
           </p>
           <button
             type="button"
@@ -741,55 +1031,57 @@ export default function AdminHissabSummary({
             className="mt-5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-colors inline-flex items-center gap-2 cursor-pointer"
           >
             <RefreshCw className="w-3.5 h-3.5" />
-            Check Again
+            Sync / Refresh
           </button>
         </div>
       ) : (
-        /* Table View */
         <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs overflow-hidden transition-colors">
-          {/* Desktop Responsive Table */}
+          {/* Horizontally Scrollable Table for all 39 columns */}
           <div className="hidden md:block overflow-x-auto max-h-[650px] overflow-y-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full text-left border-collapse min-w-[3200px]">
               <thead className="bg-slate-100/90 dark:bg-slate-800/90 backdrop-blur-md sticky top-0 z-10 text-[11px] font-black uppercase text-slate-600 dark:text-slate-300 tracking-wider border-b border-slate-200 dark:border-slate-700">
                 <tr>
-                  <th className="py-3.5 px-3 w-16 text-center text-slate-400 font-mono">Row #</th>
-                  {headers.map((header, colIdx) => (
-                    <th
-                      key={colIdx}
-                      className={`py-3.5 px-4 whitespace-nowrap font-extrabold ${
-                        isAmountHeader(header) ? "text-right" : "text-left"
-                      }`}
-                    >
-                      {header || `Column ${colIdx + 1}`}
-                    </th>
-                  ))}
+                  <th className="py-3.5 px-3 w-16 text-center text-slate-400 font-mono sticky left-0 z-20 bg-slate-100 dark:bg-slate-800">Row #</th>
+                  {headers.map((header, colIdx) => {
+                    const isFinancial = EDITABLE_FINANCIAL_COLUMNS.has(header);
+                    return (
+                      <th
+                        key={colIdx}
+                        className={`py-3.5 px-4 whitespace-nowrap font-extrabold ${
+                          isFinancial ? "text-right text-blue-700 dark:text-blue-300" : "text-left"
+                        }`}
+                      >
+                        {header || `Column ${colIdx + 1}`}
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs text-slate-800 dark:text-slate-200">
                 {paginatedRecords.length === 0 ? (
                   <tr>
                     <td colSpan={headers.length + 1} className="py-8 text-center text-slate-400 font-medium">
-                      No records match your search query or column filter.
+                      No records match your active search or filters.
                     </td>
                   </tr>
                 ) : (
                   paginatedRecords.map((record) => {
-                    const sheetRow = record.sheetRowIndex; // Exact Google Sheet 1-based row index
+                    const sheetRow = record.sheetRowIndex;
 
                     return (
                       <tr
                         key={sheetRow}
                         className="hover:bg-blue-50/50 dark:hover:bg-slate-800/50 transition-colors odd:bg-white even:bg-slate-50/40 dark:odd:bg-slate-900 dark:even:bg-slate-800/20"
                       >
-                        {/* Sheet Row Index Badge */}
-                        <td className="py-3 px-3 text-center text-[11px] font-mono font-bold text-slate-400">
+                        {/* Sheet Row Index */}
+                        <td className="py-3 px-3 text-center text-[11px] font-mono font-bold text-slate-400 sticky left-0 z-10 bg-white dark:bg-slate-900">
                           {sheetRow}
                         </td>
 
                         {headers.map((header, colIdx) => {
                           const rawValue = record.values[colIdx] ?? "";
                           const cellText = formatCellDisplay(rawValue);
-                          const isAmt = isAmountHeader(header);
+                          const isFinancial = EDITABLE_FINANCIAL_COLUMNS.has(header);
                           const isCurrentlyEditing =
                             editingCell?.sheetRowIndex === sheetRow && editingCell?.colIndex === colIdx;
 
@@ -797,7 +1089,7 @@ export default function AdminHissabSummary({
                             <td
                               key={colIdx}
                               className={`py-3 px-4 whitespace-nowrap ${
-                                isAmt ? "text-right font-mono font-bold" : "font-medium"
+                                isFinancial ? "text-right font-mono font-bold text-slate-900 dark:text-slate-100" : "font-medium"
                               }`}
                             >
                               {isCurrentlyEditing ? (
@@ -835,11 +1127,11 @@ export default function AdminHissabSummary({
                                   </button>
                                 </div>
                               ) : (
-                                <div className={`group flex items-center gap-2 ${isAmt ? "justify-end" : "justify-start"}`}>
+                                <div className={`group flex items-center gap-2 ${isFinancial ? "justify-end" : "justify-start"}`}>
                                   <span>{cellText}</span>
 
-                                  {/* Edit Amount Button */}
-                                  {isAmt && isUserAuthorized && (
+                                  {/* Edit Financial Amount Button */}
+                                  {isFinancial && isUserAuthorized && (
                                     <button
                                       type="button"
                                       onClick={() =>
@@ -870,11 +1162,11 @@ export default function AdminHissabSummary({
             </table>
           </div>
 
-          {/* Mobile Responsive Cards */}
+          {/* Mobile Card Layout */}
           <div className="block md:hidden p-4 space-y-3">
             {paginatedRecords.length === 0 ? (
               <div className="text-center py-6 text-xs text-slate-400 font-medium">
-                No records match your search filter.
+                No records match active search/filters.
               </div>
             ) : (
               paginatedRecords.map((record) => {
@@ -920,7 +1212,7 @@ export default function AdminHissabSummary({
                       <div className="pt-3 border-t border-slate-200/60 dark:border-slate-800 space-y-2 text-xs animate-fade-in">
                         {headers.map((header, colIdx) => {
                           const rawVal = record.values[colIdx] ?? "";
-                          const isAmt = isAmountHeader(header);
+                          const isFinancial = EDITABLE_FINANCIAL_COLUMNS.has(header);
                           const isEditing = editingCell?.sheetRowIndex === sheetRow && editingCell?.colIndex === colIdx;
 
                           return (
@@ -965,7 +1257,7 @@ export default function AdminHissabSummary({
                                   <span className="font-mono font-extrabold text-slate-900 dark:text-white">
                                     {formatCellDisplay(rawVal)}
                                   </span>
-                                  {isAmt && isUserAuthorized && (
+                                  {isFinancial && isUserAuthorized && (
                                     <button
                                       onClick={() =>
                                         setEditingCell({
@@ -1050,7 +1342,7 @@ export default function AdminHissabSummary({
                 </div>
                 <div>
                   <h3 className="text-base font-black text-slate-800 dark:text-white">
-                    Upload CSV to "Hissab Summary"
+                    Upload CSV to Hissab Summary
                   </h3>
                   <p className="text-xs text-slate-400 font-medium">
                     Target Sheet: <span className="font-bold text-slate-700 dark:text-slate-300">Google Sheet → Hissab Summary</span>
@@ -1064,15 +1356,17 @@ export default function AdminHissabSummary({
                   setShowCsvModal(false);
                   setCsvFile(null);
                   setCsvMappedRows([]);
+                  setMissingHeaders([]);
+                  setExtraHeaders([]);
                 }}
                 disabled={isUploadingCsv}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* CSV File Selection */}
+            {/* File Selection Box */}
             {!csvFile ? (
               <div className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl p-8 text-center space-y-3 hover:border-emerald-500 transition-colors">
                 <div className="w-12 h-12 mx-auto rounded-full bg-emerald-50 dark:bg-emerald-950 text-emerald-600 flex items-center justify-center">
@@ -1083,7 +1377,7 @@ export default function AdminHissabSummary({
                     Click to select CSV File
                   </label>
                   <p className="text-[11px] text-slate-400 mt-1">
-                    Format: .csv file with matching column headers
+                    Accepts .csv file with Hissab Summary headers
                   </p>
                 </div>
                 <input
@@ -1095,54 +1389,79 @@ export default function AdminHissabSummary({
                 />
               </div>
             ) : (
-              /* CSV Preview & Validation */
+              /* CSV Validation & Metrics Preview */
               <div className="space-y-4 text-xs">
-                {/* Header Validation Banner */}
-                {missingHeaders.length > 0 || extraHeaders.length > 0 ? (
-                  <div className="bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 p-4 rounded-2xl text-amber-900 dark:text-amber-200 space-y-1">
-                    <div className="flex items-center gap-2 font-bold text-xs">
-                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                      <span>Header Mismatch Warning</span>
+                {/* Missing Columns Error Display */}
+                {missingHeaders.length > 0 ? (
+                  <div className="bg-rose-50 dark:bg-rose-950/80 border border-rose-300 dark:border-rose-800 p-4 rounded-2xl text-rose-900 dark:text-rose-200 space-y-2">
+                    <div className="flex items-center gap-2 font-black text-xs text-rose-700 dark:text-rose-300">
+                      <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                      <span>CSV upload cannot continue.</span>
                     </div>
-                    {missingHeaders.length > 0 && (
-                      <p className="text-[11px] font-medium text-amber-800 dark:text-amber-300">
-                        Missing Sheet Columns (will be left empty): <span className="font-bold">{missingHeaders.join(", ")}</span>
-                      </p>
-                    )}
-                    {extraHeaders.length > 0 && (
-                      <p className="text-[11px] font-medium text-amber-800 dark:text-amber-300">
-                        Extra CSV Columns (will be omitted): <span className="font-bold">{extraHeaders.join(", ")}</span>
-                      </p>
-                    )}
+                    <p className="text-xs font-bold text-rose-800 dark:text-rose-200">
+                      Missing required Hissab Summary columns:
+                    </p>
+                    <ul className="list-disc list-inside text-[11px] font-mono space-y-0.5 text-rose-800 dark:text-rose-300 max-h-32 overflow-y-auto pl-1">
+                      {missingHeaders.map((mh) => (
+                        <li key={mh}>{mh}</li>
+                      ))}
+                    </ul>
                   </div>
                 ) : (
                   <div className="bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 p-3 rounded-2xl text-emerald-900 dark:text-emerald-200 flex items-center gap-2 font-bold">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>Headers match the Google Sheet 'Hissab Summary' tab perfectly!</span>
+                    <span>All required Hissab Summary columns matched successfully!</span>
+                  </div>
+                )}
+
+                {/* Extra Columns Note (Safely Ignored) */}
+                {extraHeaders.length > 0 && (
+                  <div className="bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 p-3 rounded-2xl text-slate-600 dark:text-slate-300 text-[11px]">
+                    <span className="font-bold">Extra CSV Columns (will be ignored safely): </span>
+                    <span>{extraHeaders.join(", ")}</span>
                   </div>
                 )}
 
                 {/* Stat Metrics Grid */}
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 text-center">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+                  <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 text-center">
                     <span className="text-[10px] font-bold text-slate-400 uppercase block">Total CSV Rows</span>
-                    <span className="text-base font-black text-slate-800 dark:text-white font-mono">{csvRawRows.length}</span>
+                    <span className="text-sm font-black text-slate-800 dark:text-white font-mono">{csvRawRows.length}</span>
                   </div>
-                  <div className="p-3 bg-emerald-50 dark:bg-emerald-950/50 rounded-2xl border border-emerald-200 dark:border-emerald-800 text-center">
-                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase block">Valid Mapped Rows</span>
-                    <span className="text-base font-black text-emerald-700 dark:text-emerald-300 font-mono">{csvMappedRows.length}</span>
+                  <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/50 rounded-2xl border border-emerald-200 dark:border-emerald-800 text-center">
+                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase block">Valid Mapped</span>
+                    <span className="text-sm font-black text-emerald-700 dark:text-emerald-300 font-mono">{csvMappedRows.length}</span>
                   </div>
-                  <div className="p-3 bg-amber-50 dark:bg-amber-950/50 rounded-2xl border border-amber-200 dark:border-amber-800 text-center">
-                    <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase block">Duplicates Found</span>
-                    <span className="text-base font-black text-amber-700 dark:text-amber-300 font-mono">{duplicateCount}</span>
+                  <div className="p-2.5 bg-blue-50 dark:bg-blue-950/50 rounded-2xl border border-blue-200 dark:border-blue-800 text-center">
+                    <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase block">New Records</span>
+                    <span className="text-sm font-black text-blue-700 dark:text-blue-300 font-mono">{newRecordCount}</span>
+                  </div>
+                  <div className="p-2.5 bg-amber-50 dark:bg-amber-950/50 rounded-2xl border border-amber-200 dark:border-amber-800 text-center">
+                    <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase block">Duplicate Rows</span>
+                    <span className="text-sm font-black text-amber-700 dark:text-amber-300 font-mono">{duplicateCount}</span>
+                  </div>
+                  <div className="p-2.5 bg-indigo-50 dark:bg-indigo-950/50 rounded-2xl border border-indigo-200 dark:border-indigo-800 text-center col-span-2 sm:col-span-1">
+                    <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase block">Matched Headers</span>
+                    <span className="text-sm font-black text-indigo-700 dark:text-indigo-300 font-mono">{EXPECTED_HISSAB_SUMMARY_HEADERS.length - missingHeaders.length} / {EXPECTED_HISSAB_SUMMARY_HEADERS.length}</span>
                   </div>
                 </div>
 
-                {/* Duplicate Strategy Option */}
+                {/* Duplicate Strategy Policy Option */}
                 {duplicateCount > 0 && (
                   <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-1.5">
-                    <span className="font-extrabold text-slate-800 dark:text-slate-200 block">Duplicate Rows Action:</span>
-                    <div className="flex items-center gap-4 text-xs font-medium">
+                    <span className="font-extrabold text-slate-800 dark:text-slate-200 block">
+                      Duplicate Record Handling Strategy (Matching Key: Car Number + Start Date + End Date + ETM ID):
+                    </span>
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 text-xs font-medium">
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="dupeStrategy"
+                          checked={duplicateStrategy === "update"}
+                          onChange={() => setDuplicateStrategy("update")}
+                        />
+                        <span>Update existing matching record (Recommended)</span>
+                      </label>
                       <label className="flex items-center gap-1.5 cursor-pointer">
                         <input
                           type="radio"
@@ -1150,33 +1469,24 @@ export default function AdminHissabSummary({
                           checked={duplicateStrategy === "skip"}
                           onChange={() => setDuplicateStrategy("skip")}
                         />
-                        <span>Skip duplicate records</span>
-                      </label>
-                      <label className="flex items-center gap-1.5 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="dupeStrategy"
-                          checked={duplicateStrategy === "insert_all"}
-                          onChange={() => setDuplicateStrategy("insert_all")}
-                        />
-                        <span>Insert all records</span>
+                        <span>Skip duplicates</span>
                       </label>
                     </div>
                   </div>
                 )}
 
-                {/* Important Notice */}
+                {/* Insertion Policy Notice */}
                 <div className="p-3 rounded-2xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800/80 text-blue-900 dark:text-blue-200 text-xs font-medium space-y-1">
                   <p className="font-extrabold flex items-center gap-1.5">
                     <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
-                    Insertion Order Policy:
+                    Insertion Policy:
                   </p>
                   <p className="text-[11px] text-blue-800 dark:text-blue-300 leading-relaxed">
-                    New CSV records will be inserted <span className="font-bold uppercase underline">at the TOP</span> of the Google Sheet (immediately below the Row 1 Header). All existing old records will be preserved underneath.
+                    New CSV records will be inserted <span className="font-bold uppercase underline">at the TOP</span> of the Google Sheet (immediately below Row 1 Header). Existing records will remain preserved below.
                   </p>
                 </div>
 
-                {/* Mapped CSV Data Preview Table */}
+                {/* Data Preview */}
                 <div className="border border-slate-200 dark:border-slate-700 rounded-2xl overflow-x-auto max-h-48">
                   <table className="w-full text-left text-[11px]">
                     <thead className="bg-slate-100 dark:bg-slate-800 font-bold uppercase text-slate-600 dark:text-slate-300">
@@ -1200,7 +1510,7 @@ export default function AdminHissabSummary({
                   </table>
                 </div>
 
-                {/* Progress / Status Indicator */}
+                {/* Status Indicator */}
                 {isUploadingCsv && (
                   <div className="p-4 bg-emerald-50 dark:bg-emerald-950/80 rounded-2xl border border-emerald-200 text-emerald-800 dark:text-emerald-200 text-center space-y-2">
                     <RefreshCw className="w-5 h-5 mx-auto animate-spin text-emerald-600" />
@@ -1208,13 +1518,15 @@ export default function AdminHissabSummary({
                   </div>
                 )}
 
-                {/* Action Buttons */}
+                {/* Modal Buttons */}
                 <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
                   <button
                     type="button"
                     onClick={() => {
                       setCsvFile(null);
                       setCsvMappedRows([]);
+                      setMissingHeaders([]);
+                      setExtraHeaders([]);
                     }}
                     disabled={isUploadingCsv}
                     className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 font-bold transition-colors cursor-pointer"
@@ -1225,7 +1537,7 @@ export default function AdminHissabSummary({
                   <button
                     type="button"
                     onClick={handleConfirmCsvUpload}
-                    disabled={isUploadingCsv || csvMappedRows.length === 0}
+                    disabled={isUploadingCsv || missingHeaders.length > 0 || csvMappedRows.length === 0}
                     className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-extrabold shadow-md transition-all cursor-pointer flex items-center gap-2"
                   >
                     {isUploadingCsv && <RefreshCw className="w-4 h-4 animate-spin" />}
