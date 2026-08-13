@@ -378,6 +378,7 @@ export default function AdminPanelContainer({
         {activeScreen === AdminScreen.HISSAB_SUMMARY && (
           <AdminHissabSummary
             accessToken={accessToken}
+            currentAdminDriver={currentAdminDriver}
           />
         )}
 

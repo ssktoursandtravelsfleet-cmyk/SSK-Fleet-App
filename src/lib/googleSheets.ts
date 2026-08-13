@@ -1139,3 +1139,52 @@ export async function updateDocumentsVerificationRecord(
   return { success: true, message: "Saved successfully." };
 }
 
+/**
+ * Helper to convert 0-based column index to Google Sheets column letter (A, B, C, ..., Z, AA, AB, etc.)
+ */
+export function getColumnLetter(colIndex: number): string {
+  let temp = colIndex;
+  let letter = "";
+  while (temp >= 0) {
+    letter = String.fromCharCode((temp % 26) + 65) + letter;
+    temp = Math.floor(temp / 26) - 1;
+  }
+  return letter;
+}
+
+/**
+ * Updates a single cell in "Hissab Summary" sheet at a specific row (1-based index) and column (0-based index)
+ */
+export async function updateHissabSummaryCell(
+  rowIndex: number,
+  colIndex: number,
+  newValue: string,
+  accessToken?: string | null
+): Promise<any> {
+  const colLetter = getColumnLetter(colIndex);
+  const range = `'Hissab Summary'!${colLetter}${rowIndex}`;
+  const response = await updateSheetRange(range, [[newValue]], accessToken);
+  clearSheetCache();
+  return response;
+}
+
+/**
+ * Inserts new CSV records at the TOP of "Hissab Summary" sheet (immediately below Row 1 header)
+ * Preserves all existing data below the new records.
+ */
+export async function insertHissabSummaryRecordsAtTop(
+  headers: string[],
+  newCsvMappedRows: string[][],
+  existingDataRows: string[][],
+  accessToken?: string | null
+): Promise<any> {
+  const combinedMatrix = [headers, ...newCsvMappedRows, ...existingDataRows];
+  const endColLetter = getColumnLetter(Math.max(headers.length - 1, 0));
+  const endRowIndex = combinedMatrix.length;
+  const range = `'Hissab Summary'!A1:${endColLetter}${endRowIndex}`;
+
+  const response = await updateSheetRange(range, combinedMatrix, accessToken);
+  clearSheetCache();
+  return response;
+}
+
