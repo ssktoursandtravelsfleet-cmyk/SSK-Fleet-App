@@ -186,6 +186,7 @@ export interface DriverDocumentRecord {
   dlFrontUrl: string;
   dlBackUrl: string;
   bankPassbookUrl: string;
+  addressPhotoUrl?: string;
   policeVerificationUrl: string;
   status: string;
   lastUpdated: string;

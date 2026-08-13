@@ -158,6 +158,12 @@ export default function DashboardScreen({
             >
               <Menu className="w-5.5 h-5.5" />
             </button>
+            <img
+              src="/ssk_logo.png"
+              alt="SSK Logo"
+              className="w-8 h-8 sm:w-9 sm:h-9 object-contain shrink-0 drop-shadow-sm"
+              referrerPolicy="no-referrer"
+            />
             <div>
               <p className="text-[10px] sm:text-xs text-blue-200 font-semibold tracking-wider uppercase leading-none">Welcome Back</p>
               <h3 className="text-sm sm:text-base lg:text-lg font-extrabold tracking-tight text-white mt-1 leading-none">{driver.Name || driver.Driver_Name || driver.name}</h3>

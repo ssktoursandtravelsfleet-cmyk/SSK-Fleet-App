@@ -28,6 +28,7 @@ interface AdminDrawerProps {
   onLogout: () => void;
   adminName?: string;
   adminMobile?: string;
+  adminRole?: string;
   pendingDocCount?: number;
 }
 
@@ -39,6 +40,7 @@ export default function AdminDrawer({
   onLogout,
   adminName = "Admin Console",
   adminMobile = "Fleet Operations",
+  adminRole = "Admin",
   pendingDocCount = 0
 }: AdminDrawerProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -116,15 +118,31 @@ export default function AdminDrawer({
       >
         {/* Desktop Header */}
         <div className="p-4 bg-[#0A3880] flex items-center justify-between border-b border-blue-800 shrink-0 h-16">
-          {!isCollapsed && (
-            <div className="min-w-0">
-              <h3 className="font-extrabold text-xs leading-tight text-white truncate">{adminName}</h3>
-              <p className="text-[10px] text-blue-200 font-medium truncate">{adminMobile}</p>
+          {!isCollapsed ? (
+            <div className="flex items-center gap-2.5 min-w-0">
+              <img
+                src="/ssk_logo.png"
+                alt="SSK Logo"
+                className="w-9 h-9 object-contain shrink-0 drop-shadow-sm"
+                referrerPolicy="no-referrer"
+              />
+              <div className="min-w-0">
+                <h3 className="font-extrabold text-xs leading-tight text-white truncate">{adminName}</h3>
+                <p className="text-[10px] text-blue-200 font-medium truncate">{adminMobile}</p>
+                <p className="text-[10px] text-amber-300 font-extrabold uppercase tracking-wider truncate mt-0.5">{adminRole}</p>
+              </div>
             </div>
+          ) : (
+            <img
+              src="/ssk_logo.png"
+              alt="SSK Logo"
+              className="w-8 h-8 object-contain shrink-0 mx-auto"
+              referrerPolicy="no-referrer"
+            />
           )}
           <button
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className="p-1.5 rounded-lg hover:bg-blue-800 text-blue-200 hover:text-white transition-colors cursor-pointer ml-1"
+            className="p-1.5 rounded-lg hover:bg-blue-800 text-blue-200 hover:text-white transition-colors cursor-pointer ml-1 shrink-0"
             title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
           >
             {isCollapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
@@ -210,13 +228,22 @@ export default function AdminDrawer({
             >
               {/* Header */}
               <div className="px-4 pt-[calc(1rem+env(safe-area-inset-top,0px))] pb-4 bg-[#0A3880] flex items-center justify-between border-b border-blue-800">
-                <div>
-                  <h3 className="font-bold text-sm leading-tight text-white">{adminName}</h3>
-                  <p className="text-[10px] text-blue-200 font-medium">{adminMobile}</p>
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <img
+                    src="/ssk_logo.png"
+                    alt="SSK Logo"
+                    className="w-8 h-8 object-contain shrink-0 drop-shadow-sm"
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="min-w-0">
+                    <h3 className="font-bold text-sm leading-tight text-white truncate">{adminName}</h3>
+                    <p className="text-[10px] text-blue-200 font-medium truncate">{adminMobile}</p>
+                    <p className="text-[10px] text-amber-300 font-extrabold uppercase tracking-wider truncate mt-0.5">{adminRole}</p>
+                  </div>
                 </div>
                 <button
                   onClick={onClose}
-                  className="p-1.5 rounded-full hover:bg-blue-800 text-blue-200 hover:text-white transition-colors cursor-pointer"
+                  className="p-1.5 rounded-full hover:bg-blue-800 text-blue-200 hover:text-white transition-colors cursor-pointer shrink-0"
                   title="Close drawer"
                 >
                   <X className="w-5 h-5" />

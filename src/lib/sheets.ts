@@ -2469,23 +2469,44 @@ export async function saveDriverDocumentsToVerificationSheet(
       };
     }
 
+    // Clear sheet cache to get fresh data from Google Sheets
+    sheetValuesCache.clear();
+
     // Fetch existing rows from Documents_Verification
-    const rows = await fetchSheetValues(SPREADSHEET_ID, sheetName, effectiveToken).catch(() => []);
+    let rows = await fetchSheetValues(SPREADSHEET_ID, sheetName, effectiveToken).catch(() => []);
 
-    let matchedRowIndex = -1;
-    let existingRow: string[] = [];
+    const HEADERS = [
+      "Driver ID",
+      "ETM ID",
+      "Driver Name",
+      "Mobile Number",
+      "Profile Photo",
+      "Aadhaar Front",
+      "Aadhaar Back",
+      "Aadhaar No",
+      "PAN Card Photo",
+      "PAN Card No",
+      "Driving Licence Front",
+      "Driving Licence Back",
+      "Driving Licence No",
+      "Address Proof",
+      "Address Proof Photo",
+      "Bank Passbook"
+    ];
 
-    if (rows && rows.length > 0) {
-      for (let i = 1; i < rows.length; i++) {
-        const row = rows[i];
-        if (!row || row.length === 0) continue;
-        const cellEtm = row[1] ? String(row[1]).trim().toUpperCase() : "";
-        const cellMobile = row[3] ? String(row[3]).replace(/\D/g, "").slice(-10) : "";
-
-        // Strictly MATCH BOTH ETM ID and Mobile Number
-        if (cellEtm === cleanEtm && cellMobile === cleanMobile) {
-          matchedRowIndex = i;
-          existingRow = row;
+    // Check for idempotency / double-submit: If an identical row matching cleanEtm, cleanMobile, and profilePhotoUrl
+    // was ALREADY appended in Documents_Verification (e.g. from network retry or double click), reuse that submission.
+    let alreadySubmittedRowIndex = -1;
+    if (rows && rows.length > 1) {
+      for (let i = rows.length - 1; i >= 1; i--) {
+        const r = rows[i];
+        if (!r || r.length === 0) continue;
+        const cellEtm = r[1] ? String(r[1]).trim().toUpperCase() : "";
+        const cellMobile = r[3] ? String(r[3]).replace(/\D/g, "").slice(-10) : "";
+        const cellProfilePhoto = r[4] ? String(r[4]).trim() : "";
+        if (cellEtm === cleanEtm && cellMobile === cleanMobile && cellProfilePhoto === profilePhotoUrl) {
+          alreadySubmittedRowIndex = i;
+          console.log(`[DOCUMENT SAVE] Found existing identical submission at row ${i + 1}. Preventing duplicate creation.`);
           break;
         }
       }
@@ -2509,31 +2530,66 @@ export async function saveDriverDocumentsToVerificationSheet(
     // 15. Address Proof Photo
     // 16. Bank Passbook
     const rowValues = [
-      existingRow[0] || driverId,                                                                      // Col 1: Driver ID
-      cleanEtm,                                                                                        // Col 2: ETM ID
-      existingRow[2] || driverName,                                                                    // Col 3: Driver Name
-      cleanMobile,                                                                                     // Col 4: Mobile Number
-      profilePhotoUrl || existingRow[4] || "",                                                         // Col 5: Profile Photo
-      aadhaarFrontUrl || existingRow[5] || "",                                                         // Col 6: Aadhaar Front
-      aadhaarBackUrl || existingRow[6] || "",                                                          // Col 7: Aadhaar Back
-      docUpdates.aadhaarNumber !== undefined && docUpdates.aadhaarNumber.trim() !== "" ? docUpdates.aadhaarNumber.trim().replace(/[\s-]/g, "") : (existingRow[7] || ""), // Col 8: Aadhaar No
-      panCardUrl || existingRow[8] || "",                                                              // Col 9: PAN Card Photo
-      docUpdates.panNumber !== undefined && docUpdates.panNumber.trim() !== "" ? docUpdates.panNumber.trim().toUpperCase() : (existingRow[9] || ""),             // Col 10: PAN Card No
-      dlFrontUrl || existingRow[10] || "",                                                             // Col 11: Driving Licence Front
-      dlBackUrl || existingRow[11] || "",                                                              // Col 12: Driving Licence Back
-      docUpdates.dlNumber !== undefined && docUpdates.dlNumber.trim() !== "" ? docUpdates.dlNumber.trim().toUpperCase() : (existingRow[12] || ""),              // Col 13: Driving Licence No
-      docUpdates.addressText !== undefined && docUpdates.addressText.trim() !== "" ? docUpdates.addressText.trim() : (existingRow[13] || ""),                     // Col 14: Address Proof
-      addressPhotoUrl || existingRow[14] || "",                                                        // Col 15: Address Proof Photo
-      bankPassbookUrl || existingRow[15] || ""                                                         // Col 16: Bank Passbook
+      driverId,                                                                                        // Col 1 (A): Driver ID
+      cleanEtm,                                                                                        // Col 2 (B): ETM ID
+      driverName,                                                                                      // Col 3 (C): Driver Name
+      cleanMobile,                                                                                     // Col 4 (D): Mobile Number
+      profilePhotoUrl || "",                                                                           // Col 5 (E): Profile Photo
+      aadhaarFrontUrl || "",                                                                           // Col 6 (F): Aadhaar Front
+      aadhaarBackUrl || "",                                                                            // Col 7 (G): Aadhaar Back
+      docUpdates.aadhaarNumber !== undefined && docUpdates.aadhaarNumber.trim() !== "" ? docUpdates.aadhaarNumber.trim().replace(/[\s-]/g, "") : "", // Col 8 (H): Aadhaar No
+      panCardUrl || "",                                                                                // Col 9 (I): PAN Card Photo
+      docUpdates.panNumber !== undefined && docUpdates.panNumber.trim() !== "" ? docUpdates.panNumber.trim().toUpperCase() : "",             // Col 10 (J): PAN Card No
+      dlFrontUrl || "",                                                                                // Col 11 (K): Driving Licence Front
+      dlBackUrl || "",                                                                                 // Col 12 (L): Driving Licence Back
+      docUpdates.dlNumber !== undefined && docUpdates.dlNumber.trim() !== "" ? docUpdates.dlNumber.trim().toUpperCase() : "",              // Col 13 (M): Driving Licence No
+      docUpdates.addressText !== undefined && docUpdates.addressText.trim() !== "" ? docUpdates.addressText.trim() : "",                     // Col 14 (N): Address Proof
+      addressPhotoUrl || "",                                                                           // Col 15 (O): Address Proof Photo
+      bankPassbookUrl || ""                                                                            // Col 16 (P): Bank Passbook
     ];
 
     let sheetSuccess = false;
 
     if (effectiveToken) {
       try {
-        if (matchedRowIndex !== -1) {
-          // Update existing matched row (A to P)
-          const cellRange = `${sheetName}!A${matchedRowIndex + 1}:P${matchedRowIndex + 1}`;
+        if (alreadySubmittedRowIndex !== -1) {
+          // Record was already created in a previous attempt of the same submission session.
+          sheetSuccess = true;
+        } else {
+          // If sheet is empty or headers missing, write headers to Row 1 first
+          if (!rows || rows.length === 0) {
+            const headerUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(sheetName)}!A1:P1?valueInputOption=USER_ENTERED`;
+            await fetch(headerUrl, {
+              method: "PUT",
+              headers: { Authorization: `Bearer ${effectiveToken}`, "Content-Type": "application/json" },
+              body: JSON.stringify({ values: [HEADERS] })
+            }).catch(() => {});
+            rows = [HEADERS];
+          }
+
+          // DYNAMICALLY DETECT LAST ROW CONTAINING ACTUAL DRIVER DATA
+          let lastDriverRowIndex = 0; // default to 0 (Row 1 headers)
+          for (let i = rows.length - 1; i >= 0; i--) {
+            const r = rows[i];
+            if (r && r.some(cell => cell && String(cell).trim() !== "")) {
+              lastDriverRowIndex = i;
+              break;
+            }
+          }
+
+          // Target new row index immediately below last driver row (1-indexed for Google Sheets)
+          let targetRowNumber = lastDriverRowIndex + 2;
+
+          // EXISTING DATA SAFETY: Verify target destination row does NOT contain existing driver data
+          while (rows[targetRowNumber - 1] && rows[targetRowNumber - 1].some(cell => cell && String(cell).trim() !== "")) {
+            console.warn(`[DOCUMENT SAVE] Destination row ${targetRowNumber} is not empty. Incrementing target row.`);
+            targetRowNumber++;
+          }
+
+          console.log(`[DOCUMENT SAVE] Writing new driver to ROW ${targetRowNumber} (below last driver entry at Row ${lastDriverRowIndex + 1}).`);
+
+          // Write all 16 fields A:P to the newly calculated target row
+          const cellRange = `${sheetName}!A${targetRowNumber}:P${targetRowNumber}`;
           const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(cellRange)}?valueInputOption=USER_ENTERED`;
           const res = await fetch(url, {
             method: "PUT",
@@ -2548,41 +2604,18 @@ export async function saveDriverDocumentsToVerificationSheet(
             sheetSuccess = true;
           } else {
             const errText = await res.text();
-            console.error("[DOCUMENT SAVE] Sheet row update HTTP error:", res.status, errText);
-          }
-        } else {
-          // No matching row exists -> Append new row
-          const HEADERS = [
-            "Driver ID",
-            "ETM ID",
-            "Driver Name",
-            "Mobile Number",
-            "Profile Photo",
-            "Aadhaar Front",
-            "Aadhaar Back",
-            "Aadhaar No",
-            "PAN Card Photo",
-            "PAN Card No",
-            "Driving Licence Front",
-            "Driving Licence Back",
-            "Driving Licence No",
-            "Address Proof",
-            "Address Proof Photo",
-            "Bank Passbook"
-          ];
-          if (!rows || rows.length === 0) {
-            await appendSheetRows(SPREADSHEET_ID, sheetName, [HEADERS], effectiveToken).catch(() => {});
-          }
-          const appRes = await appendSheetRows(SPREADSHEET_ID, sheetName, [rowValues], effectiveToken).catch(() => null);
-          if (appRes) {
-            sheetSuccess = true;
+            console.error(`[DOCUMENT SAVE] PUT to Row ${targetRowNumber} failed (${res.status}): ${errText}. Trying append fallback.`);
+            const appRes = await appendSheetRows(SPREADSHEET_ID, sheetName, [rowValues], effectiveToken).catch(() => null);
+            if (appRes) {
+              sheetSuccess = true;
+            }
           }
         }
 
-        // Clear cache and verify row in sheet
+        // Clear cache and verify newly appended row in Google Sheet
         sheetValuesCache.clear();
         const refetchedRows = await fetchSheetValues(SPREADSHEET_ID, sheetName, effectiveToken).catch(() => []);
-        let foundInRefetch = false;
+        let verifiedInSheet = false;
         if (refetchedRows && refetchedRows.length > 1) {
           for (let i = 1; i < refetchedRows.length; i++) {
             const r = refetchedRows[i];
@@ -2590,16 +2623,20 @@ export async function saveDriverDocumentsToVerificationSheet(
             const cEtm = r[1] ? String(r[1]).trim().toUpperCase() : "";
             const cMobile = r[3] ? String(r[3]).replace(/\D/g, "").slice(-10) : "";
             if (cEtm === cleanEtm && cMobile === cleanMobile) {
-              foundInRefetch = true;
+              verifiedInSheet = true;
               break;
             }
           }
         }
-        if (foundInRefetch) {
+        if (verifiedInSheet) {
           sheetSuccess = true;
+        } else {
+          console.error("[DOCUMENT SAVE] Verification failed: Driver record not found in refetched sheet rows.");
+          sheetSuccess = false;
         }
       } catch (sheetErr) {
         console.error("[DOCUMENT SAVE] Google Sheets API sync failed:", sheetErr);
+        sheetSuccess = false;
       }
     }
 

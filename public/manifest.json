@@ -1,0 +1,15 @@
+{
+  "short_name": "SSK Fleet",
+  "name": "SSK Tours & Travels Fleet Partner",
+  "icons": [
+    {
+      "src": "/ssk_logo.png",
+      "type": "image/png",
+      "sizes": "192x192 512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#08182D",
+  "theme_color": "#08182D",
+  "display": "standalone"
+}

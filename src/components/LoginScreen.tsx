@@ -190,8 +190,14 @@ export default function LoginScreen({
       transition={{ duration: 0.4 }}
       className="flex-1 flex flex-col justify-between p-5 pt-[calc(1.25rem+env(safe-area-inset-top,0px))] pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] bg-[#F5F7FA] text-[#333333] overflow-y-auto no-scrollbar relative min-h-screen"
     >
-      {/* Top Header Section */}
+      {/* Top Header Section with Official SSK Logo */}
       <div className="flex flex-col items-center justify-center pt-2 pb-2">
+        <img
+          src="/ssk_logo.png"
+          alt="SSK Tours & Travels Logo"
+          className="w-24 h-24 object-contain mb-1 drop-shadow-md"
+          referrerPolicy="no-referrer"
+        />
         <h1 className="text-xl font-extrabold tracking-tight text-[#0D47A1] text-center">
           SSK DRIVER APP
         </h1>

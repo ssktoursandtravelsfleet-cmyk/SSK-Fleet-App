@@ -57,13 +57,21 @@ export default function AdminHeader({
           <Menu className="w-5 h-5" />
         </button>
 
-        <div>
-          <h1 className="font-extrabold text-sm sm:text-base tracking-tight leading-none text-white">
-            {titleOverride || getScreenTitle(activeScreen)}
-          </h1>
-          <p className="text-[10px] text-blue-200 font-medium tracking-wide mt-0.5">
-            SSK Fleet Admin Panel
-          </p>
+        <div className="flex items-center gap-2">
+          <img
+            src="/ssk_logo.png"
+            alt="SSK Logo"
+            className="w-7 h-7 sm:w-8 sm:h-8 object-contain shrink-0 drop-shadow-xs"
+            referrerPolicy="no-referrer"
+          />
+          <div>
+            <h1 className="font-extrabold text-sm sm:text-base tracking-tight leading-none text-white">
+              {titleOverride || getScreenTitle(activeScreen)}
+            </h1>
+            <p className="text-[10px] text-blue-200 font-medium tracking-wide mt-0.5">
+              SSK Fleet Admin Panel
+            </p>
+          </div>
         </div>
       </div>
 

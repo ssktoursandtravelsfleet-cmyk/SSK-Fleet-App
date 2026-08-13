@@ -317,13 +317,21 @@ export default function OnboardingScreen({
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <div className="text-center flex-1 pr-6">
-          <h2 className="text-sm font-black tracking-widest text-[#D5A144] uppercase font-sans">
-            Driver Onboarding
-          </h2>
-          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
-            {activeStepObj?.title} ({activeStepObj?.stepNumber} of 6)
-          </p>
+        <div className="text-center flex-1 pr-6 flex items-center justify-center gap-2">
+          <img
+            src="/ssk_logo.png"
+            alt="SSK Logo"
+            className="w-7 h-7 object-contain shrink-0 drop-shadow-sm"
+            referrerPolicy="no-referrer"
+          />
+          <div>
+            <h2 className="text-sm font-black tracking-widest text-[#D5A144] uppercase font-sans">
+              Driver Onboarding
+            </h2>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
+              {activeStepObj?.title} ({activeStepObj?.stepNumber} of 6)
+            </p>
+          </div>
         </div>
       </div>
 

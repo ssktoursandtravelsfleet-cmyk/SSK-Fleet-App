@@ -1032,3 +1032,110 @@ export async function syncRejectedDriver(
     throw new Error(error?.message || "Failed to sync rejected driver to Google Sheets");
   }
 }
+
+export interface DocumentVerificationRecord {
+  rowIndex: number;
+  driverId: string;
+  etmId: string;
+  driverName: string;
+  mobileNumber: string;
+  profilePhotoUrl: string;
+  aadhaarFrontUrl: string;
+  aadhaarBackUrl: string;
+  aadhaarNumber: string;
+  panCardUrl: string;
+  panNumber: string;
+  dlFrontUrl: string;
+  dlBackUrl: string;
+  dlNumber: string;
+  addressProofText: string;
+  addressProofPhotoUrl: string;
+  bankPassbookUrl: string;
+}
+
+export async function fetchDocumentsVerificationRecords(
+  accessToken?: string | null
+): Promise<DocumentVerificationRecord[]> {
+  const token = getEffectiveAccessToken(accessToken);
+  const rows = await fetchRawSheetValues("Documents_Verification", token);
+  
+  if (!rows || rows.length <= 1) return [];
+
+  const records: DocumentVerificationRecord[] = [];
+
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row || row.length === 0) continue;
+    
+    // Check if completely empty
+    const isCompletelyEmpty = row.every(cell => !cell || !String(cell).trim());
+    if (isCompletelyEmpty) continue;
+
+    records.push({
+      rowIndex: i + 1,
+      driverId: row[0] ? String(row[0]).trim() : "",
+      etmId: row[1] ? String(row[1]).trim() : "",
+      driverName: row[2] ? String(row[2]).trim() : "",
+      mobileNumber: row[3] ? String(row[3]).trim() : "",
+      profilePhotoUrl: row[4] ? String(row[4]).trim() : "",
+      aadhaarFrontUrl: row[5] ? String(row[5]).trim() : "",
+      aadhaarBackUrl: row[6] ? String(row[6]).trim() : "",
+      aadhaarNumber: row[7] ? String(row[7]).trim() : "",
+      panCardUrl: row[8] ? String(row[8]).trim() : "",
+      panNumber: row[9] ? String(row[9]).trim() : "",
+      dlFrontUrl: row[10] ? String(row[10]).trim() : "",
+      dlBackUrl: row[11] ? String(row[11]).trim() : "",
+      dlNumber: row[12] ? String(row[12]).trim() : "",
+      addressProofText: row[13] ? String(row[13]).trim() : "",
+      addressProofPhotoUrl: row[14] ? String(row[14]).trim() : "",
+      bankPassbookUrl: row[15] ? String(row[15]).trim() : ""
+    });
+  }
+
+  return records;
+}
+
+export async function updateDocumentsVerificationRecord(
+  record: DocumentVerificationRecord,
+  userRole: string,
+  accessToken?: string | null
+): Promise<{ success: boolean; message: string }> {
+  const normalizedRole = (userRole || "").trim().toLowerCase();
+  const isAuthorized = normalizedRole.includes("super admin") || normalizedRole.includes("admin") || normalizedRole === "superadmin";
+
+  if (!isAuthorized) {
+    throw new Error("Permission Denied: Only Admin or Super Admin can edit document verification data.");
+  }
+
+  const token = await ensureAccessToken(accessToken);
+  if (!token) {
+    throw new Error("Google OAuth access token missing. Please sign in to save changes.");
+  }
+
+  const range = `Documents_Verification!A${record.rowIndex}:P${record.rowIndex}`;
+  const values = [[
+    record.driverId || "",
+    record.etmId || "",
+    record.driverName || "",
+    record.mobileNumber || "",
+    record.profilePhotoUrl || "",
+    record.aadhaarFrontUrl || "",
+    record.aadhaarBackUrl || "",
+    record.aadhaarNumber || "",
+    record.panCardUrl || "",
+    record.panNumber || "",
+    record.dlFrontUrl || "",
+    record.dlBackUrl || "",
+    record.dlNumber || "",
+    record.addressProofText || "",
+    record.addressProofPhotoUrl || "",
+    record.bankPassbookUrl || ""
+  ]];
+
+  console.log(`[Documents_Verification] Updating row ${record.rowIndex} at range ${range}:`, values);
+  await updateSheetRange(range, values, token);
+
+  clearSheetCache();
+  return { success: true, message: "Saved successfully." };
+}
+

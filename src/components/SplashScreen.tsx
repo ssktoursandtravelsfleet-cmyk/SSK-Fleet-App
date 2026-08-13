@@ -23,12 +23,25 @@ export default function SplashScreen({ onComplete }: SplashScreenProps) {
       {/* Spacer top */}
       <div />
 
-      {/* Center Brand Name */}
+      {/* Center Brand Name & Logo */}
       <div className="flex flex-col items-center justify-center">
+        <motion.div
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }}
+          className="mb-4"
+        >
+          <img
+            src="/ssk_logo.png"
+            alt="SSK Tours & Travels Logo"
+            className="w-36 h-36 object-contain drop-shadow-2xl"
+            referrerPolicy="no-referrer"
+          />
+        </motion.div>
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.8, delay: 0.3, ease: "easeOut" }}
+          transition={{ duration: 0.8, delay: 0.4, ease: "easeOut" }}
           className="text-center"
         >
           <h1 className="text-2xl font-black tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-[#D5A144] to-amber-200 uppercase font-sans">

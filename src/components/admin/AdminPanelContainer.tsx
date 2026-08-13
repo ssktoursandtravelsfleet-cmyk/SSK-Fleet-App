@@ -285,6 +285,7 @@ export default function AdminPanelContainer({
   };
 
     const pendingDocCount = drivers.filter(d => d.documentStatus === "Pending" || d.documentStatus === "Submitted").length;
+    const adminRole = currentAdminDriver?.Role || (currentAdminDriver as any)?.Role || (currentAdminDriver as any)?.role || "Super Admin";
 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-900 flex flex-col lg:flex-row font-sans">
@@ -295,8 +296,9 @@ export default function AdminPanelContainer({
         activeScreen={activeScreen}
         onSelectScreen={(screen) => setActiveScreen(screen)}
         onLogout={onLogout}
-        adminName={currentAdminDriver?.name || "Admin Manager"}
-        adminMobile={currentAdminDriver?.phone || "Fleet Master"}
+        adminName={currentAdminDriver?.name || (currentAdminDriver as any)?.Name || "Admin Manager"}
+        adminMobile={currentAdminDriver?.phone || (currentAdminDriver as any)?.Mobile_Number || (currentAdminDriver as any)?.mobile || "Fleet Master"}
+        adminRole={adminRole}
         pendingDocCount={pendingDocCount}
       />
 
@@ -324,6 +326,8 @@ export default function AdminPanelContainer({
 
         {activeScreen === AdminScreen.DOCUMENT_VERIFICATION && (
           <AdminDocumentVerification
+            accessToken={accessToken}
+            userRole={adminRole}
             drivers={drivers}
             onVerifyDocumentStatus={handleVerifyDocumentStatus}
             isProcessing={isRefreshing}
