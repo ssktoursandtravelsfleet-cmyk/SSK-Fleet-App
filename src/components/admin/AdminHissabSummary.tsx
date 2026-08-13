@@ -21,7 +21,7 @@ import {
   Filter
 } from "lucide-react";
 import { DriverDetails } from "../../types";
-import { fetchHissabSummarySheet } from "../../lib/sheets";
+import { fetchHissabSummarySheet, clearSheetCache, SHEET_NAME_HISSAB_SUMMARY } from "../../lib/sheets";
 import { updateHissabSummaryCell, insertHissabSummaryRecordsAtTop, getColumnLetter } from "../../lib/googleSheets";
 
 interface AdminHissabSummaryProps {
@@ -139,20 +139,37 @@ function normalizeDateStr(rawStr: any): string {
 }
 
 /**
+ * Normalizes header string for comparison: trims whitespace, collapses inner whitespace, converts to lowercase
+ */
+export function normalizeHeader(h: any): string {
+  if (h === null || h === undefined) return "";
+  return String(h).trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+export interface UploadErrorDetail {
+  targetSheet: string;
+  csvRows: number;
+  validRows: number;
+  rowsWritten: number;
+  reason: string;
+}
+
+/**
  * Constructs a unique matching key for a row: Car Number + Start Date + End Date + ETM ID
  */
 function buildRecordKey(rowValues: string[], headers: string[]): string {
   if (!rowValues || !headers || headers.length === 0) return "";
 
   const getColVal = (name: string) => {
-    const idx = headers.findIndex((h) => h.trim().toLowerCase() === name.trim().toLowerCase());
+    const targetNorm = normalizeHeader(name);
+    const idx = headers.findIndex((h) => normalizeHeader(h) === targetNorm);
     return idx >= 0 && rowValues[idx] !== undefined ? String(rowValues[idx]).trim() : "";
   };
 
-  const carNum = getColVal("Car Number").toUpperCase();
+  const carNum = getColVal("Car Number").toUpperCase().replace(/\s+/g, "");
   const startDate = normalizeDateStr(getColVal("Start Date"));
   const endDate = normalizeDateStr(getColVal("End Date"));
-  const etmId = getColVal("ETM ID").toUpperCase();
+  const etmId = getColVal("ETM ID").toUpperCase().replace(/\s+/g, "");
 
   if (!carNum && !startDate && !endDate && !etmId) return "";
   return `${carNum}|${startDate}|${endDate}|${etmId}`;
@@ -283,6 +300,7 @@ export default function AdminHissabSummary({
   const [duplicateStrategy, setDuplicateStrategy] = useState<"update" | "skip" | "insert_all">("update");
   const [isUploadingCsv, setIsUploadingCsv] = useState<boolean>(false);
   const [csvUploadMessage, setCsvUploadMessage] = useState<string>("");
+  const [uploadErrorDetails, setUploadErrorDetails] = useState<UploadErrorDetail | null>(null);
 
   // Permissions check
   const isUserAuthorized = useMemo(() => {
@@ -583,6 +601,10 @@ export default function AdminHissabSummary({
     if (!file) return;
 
     setCsvFile(file);
+    setUploadErrorDetails(null);
+
+    console.log("[HISSAB CSV] File selected:", file.name, `(${file.size} bytes)`);
+
     const reader = new FileReader();
 
     reader.onload = (event) => {
@@ -598,20 +620,22 @@ export default function AdminHissabSummary({
       const rawCsvHeaders = parsed[0].map((h) => (h ? h.trim() : ""));
       const rawCsvData = parsed.slice(1);
 
+      console.log("[HISSAB CSV] Raw CSV Headers:", rawCsvHeaders);
+      console.log("[HISSAB CSV] Raw CSV Data Row Count:", rawCsvData.length);
+
       setCsvHeaders(rawCsvHeaders);
       setCsvRawRows(rawCsvData);
 
-      // Use target sheet headers or EXPECTED_HISSAB_SUMMARY_HEADERS
       const targetSheetHeaders = headers.length > 0 ? headers : EXPECTED_HISSAB_SUMMARY_HEADERS;
-      const csvHeaderNorms = rawCsvHeaders.map((h) => h.toLowerCase().trim());
+      const csvHeaderNorms = rawCsvHeaders.map(normalizeHeader);
 
       // Validate required columns against exact EXPECTED_HISSAB_SUMMARY_HEADERS
       const missing = EXPECTED_HISSAB_SUMMARY_HEADERS.filter(
-        (reqH) => !csvHeaderNorms.includes(reqH.toLowerCase().trim())
+        (reqH) => !csvHeaderNorms.includes(normalizeHeader(reqH))
       );
 
       const extra = rawCsvHeaders.filter(
-        (csvH) => !targetSheetHeaders.some((sh) => sh.toLowerCase().trim() === csvH.toLowerCase().trim())
+        (csvH) => !targetSheetHeaders.some((sh) => normalizeHeader(sh) === normalizeHeader(csvH))
       );
 
       setMissingHeaders(missing);
@@ -620,17 +644,22 @@ export default function AdminHissabSummary({
       // Map CSV rows to match target headers order exactly
       const mapped: string[][] = rawCsvData.map((csvRow) => {
         return targetSheetHeaders.map((sheetH) => {
+          const normSheetH = normalizeHeader(sheetH);
           const matchIdx = rawCsvHeaders.findIndex(
-            (ch) => ch.trim().toLowerCase() === sheetH.trim().toLowerCase()
+            (ch) => normalizeHeader(ch) === normSheetH
           );
           if (matchIdx >= 0 && csvRow[matchIdx] !== undefined) {
-            return csvRow[matchIdx];
+            return String(csvRow[matchIdx]).trim();
           }
           return "";
         });
       });
 
       setCsvMappedRows(mapped);
+
+      console.log("[HISSAB CSV] Mapped Row Count:", mapped.length);
+      console.log("[HISSAB CSV] Validation Missing Headers:", missing.length > 0 ? missing : "None");
+      console.log("[HISSAB CSV] Validation Extra Headers:", extra.length > 0 ? extra : "None");
 
       // Check duplicates using primary key: Car Number + Start Date + End Date + ETM ID
       const existingKeySet = new Set<string>();
@@ -653,6 +682,8 @@ export default function AdminHissabSummary({
 
       setDuplicateCount(dupes);
       setNewRecordCount(newRecords);
+
+      console.log("[HISSAB CSV] Key Matching Breakdown:", { newRecords, duplicates: dupes });
     };
 
     reader.readAsText(file);
@@ -664,18 +695,21 @@ export default function AdminHissabSummary({
     if (missingHeaders.length > 0) {
       setToast({
         type: "error",
-        text: "Cannot upload CSV with missing required columns. Please check the missing headers list."
+        text: "Cannot upload CSV with missing required columns. Please fix the missing columns."
       });
       return;
     }
 
     setIsUploadingCsv(true);
-    setCsvUploadMessage("Processing CSV upload to Google Sheet 'Hissab Summary'...");
+    setUploadErrorDetails(null);
+    setCsvUploadMessage("Preparing Google Sheet write request for 'Hissab Summary'...");
+
+    const targetSheetHeaders = headers.length > 0 ? headers : EXPECTED_HISSAB_SUMMARY_HEADERS;
+
+    console.log("[HISSAB CSV] Target Sheet Name:", SHEET_NAME_HISSAB_SUMMARY);
+    console.log("[HISSAB CSV] Duplicate Strategy:", duplicateStrategy);
 
     try {
-      const targetSheetHeaders = headers.length > 0 ? headers : EXPECTED_HISSAB_SUMMARY_HEADERS;
-
-      // Map existing records key to their row index in dataRecords array
       const existingKeyMap = new Map<string, number>();
       const existingDataRowsCopy = dataRecords.map((r) => [...r.values]);
 
@@ -695,12 +729,10 @@ export default function AdminHissabSummary({
         const k = buildRecordKey(csvRow, targetSheetHeaders);
 
         if (k && existingKeyMap.has(k)) {
-          // Record exists in current sheet data
           if (duplicateStrategy === "update") {
             const existingIdx = existingKeyMap.get(k)!;
             const targetRow = [...existingDataRowsCopy[existingIdx]];
 
-            // Update matching row with non-empty CSV values
             csvRow.forEach((val, cIdx) => {
               if (val !== undefined && val !== null && String(val).trim() !== "") {
                 targetRow[cIdx] = val;
@@ -712,39 +744,80 @@ export default function AdminHissabSummary({
           } else if (duplicateStrategy === "skip") {
             skippedRecordsCount++;
           } else {
-            // insert_all
             newRecordsToInsertAtTop.push(csvRow);
             insertedNewCount++;
           }
         } else {
-          // Genuinely new record
           newRecordsToInsertAtTop.push(csvRow);
           insertedNewCount++;
         }
       });
 
-      // Write combined matrix to Google Sheet: Header at Row 1, New records at TOP, Updated records below
-      await insertHissabSummaryRecordsAtTop(
+      const combinedMatrix = [targetSheetHeaders, ...newRecordsToInsertAtTop, ...existingDataRowsCopy];
+      const endColLetter = getColumnLetter(Math.max(targetSheetHeaders.length - 1, 0));
+      const range = `'${SHEET_NAME_HISSAB_SUMMARY}'!A1:${endColLetter}${combinedMatrix.length}`;
+
+      console.log("[HISSAB CSV] Google Sheet Write Request:", {
+        sheetName: SHEET_NAME_HISSAB_SUMMARY,
+        range,
+        targetHeadersCount: targetSheetHeaders.length,
+        newRecordsToInsertAtTopCount: newRecordsToInsertAtTop.length,
+        updatedRecordsCount,
+        skippedRecordsCount,
+        totalCombinedMatrixRows: combinedMatrix.length
+      });
+
+      setCsvUploadMessage("Writing updated records to Google Sheet tab 'Hissab Summary'...");
+
+      const writeResponse = await insertHissabSummaryRecordsAtTop(
         targetSheetHeaders,
         newRecordsToInsertAtTop,
         existingDataRowsCopy,
         accessToken
       );
 
+      console.log("[HISSAB CSV] Google Sheet Write Response:", writeResponse);
+
+      // MANDATORY Post-Write Verification Readback
+      setCsvUploadMessage("Verifying Google Sheet write output...");
+      clearSheetCache();
+      const reFetchedData = await fetchHissabSummarySheet(accessToken, true);
+
+      console.log("[HISSAB CSV] Post-Write Verification Re-Fetched Rows Count:", reFetchedData ? reFetchedData.length : 0);
+
+      if (!reFetchedData || reFetchedData.length < combinedMatrix.length - 2) {
+        const verifyError = `Google Sheet write verification failed. Re-fetched row count (${reFetchedData?.length || 0}) is less than expected minimum (${combinedMatrix.length}).`;
+        console.error("[HISSAB CSV] Verification Failed:", verifyError);
+        throw new Error(verifyError);
+      }
+
+      console.log("[HISSAB CSV] Verification Result: SUCCESS!");
+
       setToast({
         type: "success",
-        text: `CSV Upload Successful: ${insertedNewCount} new records added at top, ${updatedRecordsCount} existing records updated${skippedRecordsCount > 0 ? `, ${skippedRecordsCount} duplicates skipped` : ""}.`
+        text: `CSV Upload Successful: ${insertedNewCount} new records added at top, ${updatedRecordsCount} existing records updated${skippedRecordsCount > 0 ? `, ${skippedRecordsCount} duplicates skipped` : ""}. Verification passed.`
       });
 
       setShowCsvModal(false);
       setCsvFile(null);
       setCsvMappedRows([]);
+      setUploadErrorDetails(null);
       await loadData(true);
     } catch (err: any) {
-      console.error("CSV Upload Google Sheet error:", err);
+      const errMsg = err?.message || String(err) || "Unknown error occurred writing to Google Sheet.";
+      console.error("[HISSAB CSV] Pipeline Failure Error:", err);
+
+      setUploadErrorDetails({
+        targetSheet: SHEET_NAME_HISSAB_SUMMARY,
+        csvRows: csvRawRows.length,
+        validRows: csvMappedRows.length,
+        rowsWritten: 0,
+        reason: errMsg
+      });
+
       setToast({
         type: "error",
-        text: "Unable to save changes to Google Sheet."
+        text: `CSV upload failed. ${errMsg}`
       });
     } finally {
       setIsUploadingCsv(false);
@@ -1391,6 +1464,25 @@ export default function AdminHissabSummary({
             ) : (
               /* CSV Validation & Metrics Preview */
               <div className="space-y-4 text-xs">
+                {/* Upload Pipeline Failure Display */}
+                {uploadErrorDetails && (
+                  <div className="bg-rose-50 dark:bg-rose-950/90 border border-rose-300 dark:border-rose-800 p-4 rounded-2xl text-rose-900 dark:text-rose-100 space-y-2.5 animate-fade-in">
+                    <div className="flex items-center gap-2 font-black text-xs text-rose-700 dark:text-rose-300">
+                      <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+                      <span>CSV Upload Failed: Unable to write to Google Sheet</span>
+                    </div>
+                    <div className="text-[11px] space-y-1 font-mono text-rose-800 dark:text-rose-200 bg-white/60 dark:bg-black/30 p-3 rounded-xl border border-rose-200 dark:border-rose-900">
+                      <p><span className="font-bold text-slate-700 dark:text-slate-300">Target Sheet:</span> {uploadErrorDetails.targetSheet}</p>
+                      <p><span className="font-bold text-slate-700 dark:text-slate-300">Total CSV Rows:</span> {uploadErrorDetails.csvRows}</p>
+                      <p><span className="font-bold text-slate-700 dark:text-slate-300">Valid Mapped Rows:</span> {uploadErrorDetails.validRows}</p>
+                      <p><span className="font-bold text-slate-700 dark:text-slate-300">Rows Written:</span> {uploadErrorDetails.rowsWritten}</p>
+                      <p className="font-bold text-rose-700 dark:text-rose-300 mt-2 pt-1 border-t border-rose-200 dark:border-rose-800">
+                        Reason: <span className="font-normal text-rose-900 dark:text-rose-100">{uploadErrorDetails.reason}</span>
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Missing Columns Error Display */}
                 {missingHeaders.length > 0 ? (
                   <div className="bg-rose-50 dark:bg-rose-950/80 border border-rose-300 dark:border-rose-800 p-4 rounded-2xl text-rose-900 dark:text-rose-200 space-y-2">

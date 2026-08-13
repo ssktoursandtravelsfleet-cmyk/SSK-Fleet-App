@@ -102,6 +102,24 @@ export async function fetchRawSheetValues(
 }
 
 /**
+ * Correctly formats Google Sheets range parameters for API endpoint URLs.
+ * Preserves '!' as literal character while URL-encoding sheet name (handling spaces).
+ */
+export function formatRangeForUrl(range: string): string {
+  if (range.includes("!")) {
+    const exclIdx = range.lastIndexOf("!");
+    let sheetPart = range.substring(0, exclIdx);
+    const cellPart = range.substring(exclIdx + 1);
+
+    if (sheetPart.startsWith("'") && sheetPart.endsWith("'")) {
+      sheetPart = sheetPart.substring(1, sheetPart.length - 1);
+    }
+    return `${encodeURIComponent(sheetPart)}!${cellPart}`;
+  }
+  return encodeURIComponent(range);
+}
+
+/**
  * Low-level sheet range updater with error throwing.
  */
 export async function updateSheetRange(
@@ -129,11 +147,10 @@ export async function updateSheetRange(
     );
   }
 
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(
-    range
-  )}?valueInputOption=USER_ENTERED`;
+  const formattedRange = formatRangeForUrl(range);
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${formattedRange}?valueInputOption=USER_ENTERED`;
 
-  logDev("updateSheetRange REQUEST", { range, values });
+  logDev("updateSheetRange REQUEST", { range, formattedRange, valuesCount: values.length });
 
   const res = await fetch(url, {
     method: "PUT",
@@ -156,7 +173,7 @@ export async function updateSheetRange(
       `Failed to update sheet range '${range}': ${res.status} ${res.statusText}. ${parseMessage || errText}`
     );
     console.error("Failure:", error.message);
-    logDev("updateSheetRange ERROR", { range }, null, error);
+    logDev("updateSheetRange ERROR", { range, formattedRange }, null, error);
     throw error;
   }
 
