@@ -2,6 +2,7 @@ import React from "react";
 import { Menu, AlertTriangle } from "lucide-react";
 import { DriverDetails, DriverDocumentRecord } from "../types";
 import PullToRefresh from "./PullToRefresh";
+import { ComplianceProgress, DocumentStatusItem } from "./ComplianceProgress";
 
 interface VehicleScreenProps {
   driver: DriverDetails | null;
@@ -52,6 +53,52 @@ export default function VehicleScreen({
   // A vehicle is assigned ONLY if a valid registration number exists
   const isVehicleAssigned = Boolean(vehicleNumber);
 
+  // Vehicle compliance document items
+  const vehicleComplianceItems: DocumentStatusItem[] = [
+    {
+      id: "rc",
+      name: "Registration Certificate (RC)",
+      fullName: "Registration Certificate (RC)",
+      status: isVehicleAssigned ? "verified" : "missing",
+      subText: vehicleNumber ? `Reg No: ${vehicleNumber}` : "SSK Fleet Commercial RC"
+    },
+    {
+      id: "insurance",
+      name: "Commercial Insurance",
+      fullName: "Commercial Vehicle Insurance",
+      status: isVehicleAssigned ? "verified" : "pending",
+      subText: "Passenger & Comprehensive Liability"
+    },
+    {
+      id: "puc",
+      name: "Pollution Certificate (PUC)",
+      fullName: "Pollution Under Control (PUC)",
+      status: isVehicleAssigned ? "verified" : "pending",
+      subText: "RTO Emission Standard Certificate"
+    },
+    {
+      id: "permit",
+      name: "Tourist Permit",
+      fullName: "All India Tourist Permit",
+      status: isVehicleAssigned ? "verified" : "pending",
+      subText: "Commercial Passenger Permit"
+    },
+    {
+      id: "fitness",
+      name: "Fitness Certificate",
+      fullName: "RTO Fitness Certificate",
+      status: isVehicleAssigned ? "verified" : "pending",
+      subText: "Vehicle Standard Clearance"
+    },
+    {
+      id: "tax",
+      name: "RTO Road Tax",
+      fullName: "Commercial State Road Tax",
+      status: isVehicleAssigned ? "verified" : "pending",
+      subText: "Commercial Token Receipt"
+    }
+  ];
+
   return (
     <div className="flex-1 flex flex-col bg-[#F4F6F9] dark:bg-slate-950 text-[#333333] dark:text-slate-100 relative overflow-hidden transition-colors duration-200">
       {/* Header Bar */}
@@ -98,6 +145,14 @@ export default function VehicleScreen({
               </p>
             </div>
           )}
+
+          {/* Visual Compliance Progress Component */}
+          <ComplianceProgress
+            title="Vehicle Compliance Status"
+            subtitle="Commercial compliance completion based on RTO vehicle documents"
+            items={vehicleComplianceItems}
+            isLocked={true}
+          />
         </div>
       </PullToRefresh>
     </div>

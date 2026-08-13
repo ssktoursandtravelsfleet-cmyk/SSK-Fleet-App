@@ -9,6 +9,7 @@ import {
   TrendingUp,
   Receipt,
   Calendar,
+  FileSpreadsheet,
   BarChart3,
   Bell,
   Settings,
@@ -86,6 +87,12 @@ export default function AdminDrawer({
       id: AdminScreen.WEEKLY_HISSAB,
       label: "Weekly Hissab",
       icon: Calendar,
+      badge: null
+    },
+    {
+      id: AdminScreen.HISSAB_SUMMARY,
+      label: "Hissab Summary",
+      icon: FileSpreadsheet,
       badge: null
     },
     {

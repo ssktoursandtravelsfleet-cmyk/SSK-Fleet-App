@@ -1,6 +1,7 @@
 import { DriverDetails, VehicleDocument, TransactionItem, NotificationItem, PaymentRecord, DriverDocumentRecord } from "../types";
 
 export const SPREADSHEET_ID = "1zgXzRTy2-aHR8JuR2r0AISCdkywI-jtUa7wV-OW7APo";
+export const SHEET_NAME_HISSAB_SUMMARY = "Hissab Summary";
 
 export function getEffectiveToken(accessToken?: string | null): string {
   if (accessToken && accessToken.trim().length > 0) return accessToken;
@@ -3127,6 +3128,28 @@ export async function fetchWeeklyHissabSheet(accessToken?: string | null): Promi
   } catch (err) {
     console.warn("Failed fetching Weekly Hissab sheet", err);
     return [];
+  }
+}
+
+/**
+ * Fetch live data directly from Google Sheet tab "Hissab Summary"
+ * Uses "Hissab Summary" as single source of truth.
+ */
+export async function fetchHissabSummarySheet(accessToken?: string | null, forceRefresh: boolean = false): Promise<string[][]> {
+  if (forceRefresh) {
+    clearSheetCache();
+  }
+  try {
+    validateConfig(SPREADSHEET_ID);
+    let rows = await fetchSheetValues(SPREADSHEET_ID, SHEET_NAME_HISSAB_SUMMARY, accessToken);
+    if (!rows || rows.length === 0) {
+      // Fallback if tab name in Google Sheets uses underscore or alternate spacing
+      rows = await fetchSheetValues(SPREADSHEET_ID, "Hissab_Summary", accessToken);
+    }
+    return rows || [];
+  } catch (err) {
+    console.error("Failed fetching Hissab Summary sheet:", err);
+    throw err;
   }
 }
 

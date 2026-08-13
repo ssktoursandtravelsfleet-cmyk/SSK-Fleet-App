@@ -35,6 +35,8 @@ export default function AdminHeader({
         return "Outstanding Management";
       case AdminScreen.WEEKLY_HISSAB:
         return "Weekly Hissab Admin";
+      case AdminScreen.HISSAB_SUMMARY:
+        return "Hissab Summary";
       case AdminScreen.REPORTS:
         return "Reports & Analytics";
       case AdminScreen.NOTIFICATIONS:

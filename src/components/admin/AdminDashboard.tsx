@@ -12,7 +12,8 @@ import {
   ArrowRight,
   ShieldCheck,
   Bell,
-  FileText
+  FileText,
+  FileSpreadsheet
 } from "lucide-react";
 import { AdminDriverItem, AdminVehicleItem, AdminScreen } from "../../types";
 
@@ -210,6 +211,19 @@ export default function AdminDashboard({
             <div>
               <p className="text-xs font-bold text-slate-800 group-hover:text-emerald-700">Export Reports</p>
               <p className="text-[10px] text-slate-500">PDF & Excel</p>
+            </div>
+          </button>
+
+          <button
+            onClick={() => onNavigate(AdminScreen.HISSAB_SUMMARY)}
+            className="p-3 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-[#1E88E5] transition-all text-left flex items-center gap-3 group cursor-pointer"
+          >
+            <div className="w-9 h-9 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center font-bold">
+              <FileSpreadsheet className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-slate-800 group-hover:text-blue-700">Hissab Summary</p>
+              <p className="text-[10px] text-slate-500">Google Sheet Tab</p>
             </div>
           </button>
         </div>

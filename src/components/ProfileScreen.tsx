@@ -24,6 +24,7 @@ import {
 import { DriverDetails, DriverDocumentRecord } from "../types";
 import PullToRefresh from "./PullToRefresh";
 import { DISPLAY_VERSION, APP_VERSION } from "../lib/version";
+import { ComplianceProgress, DocumentStatusItem } from "./ComplianceProgress";
 
 interface ProfileScreenProps {
   driver: DriverDetails | null;
@@ -233,6 +234,59 @@ export default function ProfileScreen({
   };
 
   const isLocked = documentRecord?.isLocked ?? true;
+  const isDocApproved = documentRecord?.status === "Approved" || documentRecord?.status === "Verified" || documentRecord?.status === "approved";
+
+  const getDocStatus = (hasDoc: boolean): "verified" | "pending" | "missing" => {
+    if (hasDoc) {
+      return isDocApproved ? "verified" : "pending";
+    }
+    return "missing";
+  };
+
+  const complianceItems: DocumentStatusItem[] = [
+    {
+      id: "profile_photo",
+      name: "Profile Photo",
+      fullName: "Driver Selfie Photo",
+      status: getDocStatus(Boolean(profilePhotoPreview || documentRecord?.profilePhotoUrl || driver?.avatarUrl)),
+      subText: "Face Selfie Identification"
+    },
+    {
+      id: "aadhaar_card",
+      name: "Aadhaar Card",
+      fullName: "Aadhaar Card (UIDAI)",
+      status: getDocStatus(Boolean(aadhaarFrontPreview || documentRecord?.aadhaarFrontUrl || documentRecord?.aadhaarNumber || aadhaarNo)),
+      subText: (aadhaarNo || documentRecord?.aadhaarNumber) ? `No: ${aadhaarNo || documentRecord?.aadhaarNumber}` : "Government UIDAI Record"
+    },
+    {
+      id: "pan_card",
+      name: "PAN Card",
+      fullName: "PAN Card (Income Tax)",
+      status: getDocStatus(Boolean(panCardPreview || documentRecord?.panCardUrl || documentRecord?.panNumber || panNo)),
+      subText: (panNo || documentRecord?.panNumber) ? `No: ${panNo || documentRecord?.panNumber}` : "Permanent Account Number"
+    },
+    {
+      id: "driving_license",
+      name: "Driving License",
+      fullName: "Driving License (DL)",
+      status: getDocStatus(Boolean(dlFrontPreview || documentRecord?.dlFrontUrl || documentRecord?.dlNumber || dlNo || driver?.licenseNumber || licenseNo)),
+      subText: (dlNo || documentRecord?.dlNumber || licenseNo) ? `No: ${dlNo || documentRecord?.dlNumber || licenseNo}` : "RTO Driving License"
+    },
+    {
+      id: "bank_passbook",
+      name: "Bank Passbook",
+      fullName: "Bank Passbook / Cheque",
+      status: getDocStatus(Boolean(bankPassbookPreview || documentRecord?.bankPassbookUrl)),
+      subText: "Bank Payout Account Verification"
+    },
+    {
+      id: "police_verification",
+      name: "Police Clearance",
+      fullName: "Police Verification (PCC)",
+      status: getDocStatus(Boolean(documentRecord?.policeVerificationUrl)),
+      subText: "Police Character Clearance Record"
+    }
+  ];
 
   const docItems = [
     {
@@ -521,6 +575,25 @@ export default function ProfileScreen({
               </div>
             )}
           </div>
+
+          {/* Compliance Completion Status Component */}
+          <ComplianceProgress
+            title="Driver Compliance Completion"
+            subtitle="Overall compliance status based on verified vs pending document types"
+            items={complianceItems}
+            isLocked={isLocked}
+            onUploadClick={(docId) => {
+              if (isLocked) {
+                handleEditLockedDocument();
+                return;
+              }
+              if (docId === "profile_photo") profilePhotoRef.current?.click();
+              else if (docId === "aadhaar_card") aadhaarFrontRef.current?.click();
+              else if (docId === "pan_card") panCardRef.current?.click();
+              else if (docId === "driving_license") dlFrontRef.current?.click();
+              else if (docId === "bank_passbook") bankPassbookRef.current?.click();
+            }}
+          />
 
           {/* 3. Driver Documents & Verification Section */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-xs border border-slate-100 dark:border-slate-800 space-y-4 transition-colors duration-200">

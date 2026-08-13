@@ -11,6 +11,7 @@ import AdminReports from "./AdminReports";
 import AdminNotifications from "./AdminNotifications";
 import AdminSettings from "./AdminSettings";
 import AdminWeeklyHissab from "./AdminWeeklyHissab";
+import AdminHissabSummary from "./AdminHissabSummary";
 import WeeklyHissabScreen from "../WeeklyHissabScreen";
 import {
   fetchAllAdminData,
@@ -370,6 +371,12 @@ export default function AdminPanelContainer({
 
         {activeScreen === AdminScreen.WEEKLY_HISSAB && (
           <AdminWeeklyHissab
+            accessToken={accessToken}
+          />
+        )}
+
+        {activeScreen === AdminScreen.HISSAB_SUMMARY && (
+          <AdminHissabSummary
             accessToken={accessToken}
           />
         )}
