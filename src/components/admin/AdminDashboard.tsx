@@ -13,7 +13,7 @@ import {
   ShieldCheck,
   Bell,
   FileText,
-  FileSpreadsheet
+  Calculator
 } from "lucide-react";
 import { AdminDriverItem, AdminVehicleItem, AdminScreen } from "../../types";
 
@@ -210,7 +210,7 @@ export default function AdminDashboard({
             </div>
             <div>
               <p className="text-xs font-bold text-slate-800 group-hover:text-emerald-700">Export Reports</p>
-              <p className="text-[10px] text-slate-500">PDF & Excel</p>
+              <p className="text-[10px] text-slate-500">PDF & Data</p>
             </div>
           </button>
 
@@ -219,11 +219,11 @@ export default function AdminDashboard({
             className="p-3 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-[#1E88E5] transition-all text-left flex items-center gap-3 group cursor-pointer"
           >
             <div className="w-9 h-9 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center font-bold">
-              <FileSpreadsheet className="w-5 h-5" />
+              <Calculator className="w-5 h-5" />
             </div>
             <div>
               <p className="text-xs font-bold text-slate-800 group-hover:text-blue-700">Hissab Summary</p>
-              <p className="text-[10px] text-slate-500">Google Sheet Tab</p>
+              <p className="text-[10px] text-slate-500">Financial Ledger</p>
             </div>
           </button>
         </div>

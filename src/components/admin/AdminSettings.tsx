@@ -49,7 +49,7 @@ export default function AdminSettings({ onRefreshAll, isRefreshing = false }: Ad
             <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Admin Console Settings & Preferences</h2>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Google Sheets database parameters, API connection status, and application dark mode customization.
+            Database sync parameters, security status, and application preferences.
           </p>
         </div>
         <span className="px-3 py-1 rounded-full bg-blue-100 dark:bg-blue-950/80 text-[#0D47A1] dark:text-blue-300 font-extrabold text-xs shadow-xs border border-blue-200 dark:border-blue-800">
@@ -118,8 +118,8 @@ export default function AdminSettings({ onRefreshAll, isRefreshing = false }: Ad
         <div className="flex items-center gap-3 p-3 bg-blue-50 dark:bg-blue-950/50 rounded-xl border border-blue-200 dark:border-blue-900">
           <Database className="w-6 h-6 text-[#0D47A1] dark:text-blue-400 shrink-0" />
           <div>
-            <h3 className="font-extrabold text-xs text-[#0D47A1] dark:text-blue-300">Connected Google Spreadsheet</h3>
-            <p className="text-[11px] font-mono text-slate-600 dark:text-slate-300">ID: {spreadsheetId}</p>
+            <h3 className="font-extrabold text-xs text-[#0D47A1] dark:text-blue-300">Fleet Data Engine</h3>
+            <p className="text-[11px] font-mono text-slate-600 dark:text-slate-300">Status: Real-Time Synchronization Active</p>
           </div>
         </div>
 
@@ -132,7 +132,7 @@ export default function AdminSettings({ onRefreshAll, isRefreshing = false }: Ad
           </div>
 
           <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/80 rounded-xl">
-            <span className="font-bold text-slate-700 dark:text-slate-200">Google Sheets OAuth Scope</span>
+            <span className="font-bold text-slate-700 dark:text-slate-200">Cloud Data Access Scope</span>
             <span className="px-2.5 py-1 font-bold text-[10px] rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300">
               Read / Write Granted
             </span>
@@ -152,7 +152,7 @@ export default function AdminSettings({ onRefreshAll, isRefreshing = false }: Ad
           className="w-full py-2.5 bg-[#0D47A1] text-white font-bold text-xs rounded-xl hover:bg-blue-800 transition-colors flex items-center justify-center gap-2 cursor-pointer"
         >
           <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`} />
-          <span>Force Sync All Sheets & Cache</span>
+          <span>Force Sync All Records & Cache</span>
         </button>
 
         {/* About Section */}
@@ -168,7 +168,7 @@ export default function AdminSettings({ onRefreshAll, isRefreshing = false }: Ad
               </span>
             </div>
             <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
-              Enterprise Fleet Operations Management Portal. Facilitates driver verification, document lock controls, vehicle allotment, weekly Hissab reconciliation, and live Google Sheets database synchronization.
+              Enterprise Fleet Operations Management Portal. Facilitates driver verification, document lock controls, vehicle allotment, weekly Hissab reconciliation, and real-time cloud data synchronization.
             </p>
             <div className="flex items-center justify-between pt-1 text-[10px] text-slate-400 font-mono">
               <span>Package Build v{APP_VERSION}</span>

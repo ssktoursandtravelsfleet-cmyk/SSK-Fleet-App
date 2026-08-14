@@ -100,7 +100,7 @@ export default function AdminOutstandingManagement({
             <h2 className="text-base sm:text-lg font-bold text-amber-900">Fleet Outstanding & Dues Management</h2>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Monitor current dues, record driver payments, and sync outstanding logs with Google Sheets.
+            Monitor current dues, record driver payments, and sync outstanding logs.
           </p>
         </div>
 

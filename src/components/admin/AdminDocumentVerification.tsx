@@ -278,11 +278,11 @@ export default function AdminDocumentVerification({
               <h2 className="text-base sm:text-lg font-extrabold text-blue-950 flex items-center gap-2">
                 Document Verification Module
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200 uppercase">
-                  Single Source: Documents_Verification
+                  Verification Registry
                 </span>
               </h2>
               <p className="text-xs text-slate-500 font-medium">
-                Manage, inspect, and edit all 16 driver document columns directly synced with Google Sheets.
+                Manage, inspect, and edit all 16 driver document verification records.
               </p>
             </div>
           </div>
@@ -302,7 +302,7 @@ export default function AdminDocumentVerification({
             className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-800 hover:bg-blue-900 text-white rounded-xl text-xs font-bold transition-all shadow-sm disabled:opacity-50 cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
-            <span>{isRefreshing ? "Syncing Sheet..." : "Sync / Refresh"}</span>
+            <span>{isRefreshing ? "Syncing..." : "Sync / Refresh"}</span>
           </button>
         </div>
       </div>
@@ -389,13 +389,13 @@ export default function AdminDocumentVerification({
         {isLoading ? (
           <div className="p-12 text-center space-y-3">
             <RefreshCw className="w-8 h-8 text-blue-700 animate-spin mx-auto" />
-            <p className="text-xs font-bold text-slate-600">Fetching records directly from Google Sheet tab Documents_Verification...</p>
+            <p className="text-xs font-bold text-slate-600">Fetching driver verification records...</p>
           </div>
         ) : filteredRecords.length === 0 ? (
           <div className="p-12 text-center space-y-3">
             <FileText className="w-10 h-10 text-slate-300 mx-auto" />
             <p className="text-sm font-bold text-slate-700">No driver document records found.</p>
-            <p className="text-xs text-slate-400">Try adjusting your search query or sync the sheet.</p>
+            <p className="text-xs text-slate-400">Try adjusting your search query or refresh records.</p>
           </div>
         ) : (
           <>
@@ -877,12 +877,12 @@ export default function AdminDocumentVerification({
                     {isSaving ? (
                       <>
                         <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        <span>Saving to Google Sheets...</span>
+                        <span>Saving changes...</span>
                       </>
                     ) : (
                       <>
                         <Save className="w-3.5 h-3.5" />
-                        <span>Save Changes to Sheets</span>
+                        <span>Save Changes</span>
                       </>
                     )}
                   </button>

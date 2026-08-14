@@ -173,13 +173,13 @@ export default function App() {
     const errorMsg = err?.message || String(err);
     if (errorMsg.includes("Spreadsheet configuration missing")) {
       triggerPushNotification(
-        "Spreadsheet configuration missing",
-        "Spreadsheet configuration missing",
+        "Database configuration missing",
+        "Database configuration missing",
         "warning"
       );
     } else {
       triggerPushNotification(
-        "Google Sheet Sync Failed ❌",
+        "Data Sync Failed ❌",
         `Error details: ${errorMsg}`,
         "warning"
       );
@@ -226,8 +226,8 @@ export default function App() {
   useEffect(() => {
     if (!SPREADSHEET_ID || SPREADSHEET_ID.trim() === "" || SPREADSHEET_ID.toLowerCase().includes("placeholder") || SPREADSHEET_ID.toLowerCase().includes("your_")) {
       triggerPushNotification(
-        "Spreadsheet configuration missing",
-        "Spreadsheet configuration missing",
+        "Database configuration missing",
+        "Database configuration missing",
         "warning"
       );
     }
@@ -1018,7 +1018,7 @@ export default function App() {
 
       triggerPushNotification(
         "Payment Failed ⚠️",
-        "Unable to log payment into Google Sheets.",
+        "Unable to log payment into system.",
         "warning"
       );
 
@@ -1088,7 +1088,7 @@ export default function App() {
 
       setSyncState("synced");
     } catch (err) {
-      console.error("Manual sync with Google Sheets failed:", err);
+      console.error("Manual sync with database failed:", err);
       setSyncState("failed");
       throw new Error("Unable to sync");
     }
@@ -1126,14 +1126,14 @@ export default function App() {
         }
       }
 
-      // 2. Update cached sheets data
+      // 2. Update cached data
       const cached = getCachedSheetsData();
       if (cached) {
         cached.driver = updatedDriver;
         localStorage.setItem("ssk_cached_sheets_data", JSON.stringify(cached));
       }
 
-      // 3. Attempt Google Sheets Sync
+      // 3. Attempt database sync
       const syncRes = await updateDriverProfileInSheets(
         updatedDriver.id,
         {
@@ -1147,15 +1147,15 @@ export default function App() {
       setSyncState("synced");
       triggerPushNotification(
         "Profile Updated 👤",
-        syncRes.message || "Contact details updated and synced with Google Sheet.",
+        syncRes.message || "Contact details updated and synchronized successfully.",
         "success"
       );
     } catch (err: any) {
-      console.error("Failed to sync profile update with Google Sheet:", err);
+      console.error("Failed to sync profile update:", err);
       setSyncState("failed");
       triggerPushNotification(
         "Profile Saved Locally ⚠️",
-        "Saved locally, but Google Sheet sync encountered an issue.",
+        "Saved locally, but synchronization encountered an issue.",
         "warning"
       );
     }

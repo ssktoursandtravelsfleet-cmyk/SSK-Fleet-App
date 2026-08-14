@@ -217,7 +217,7 @@ export default function ProfileScreen({
       }
       setIsSubmitting(false);
       setIsEditing(false);
-      setStatusFeedback({ message: "Profile updated and synced with Google Sheet!", type: 'success' });
+      setStatusFeedback({ message: "Profile updated and saved successfully!", type: 'success' });
       setTimeout(() => setStatusFeedback(null), 4000);
     } catch (err: any) {
       setIsSubmitting(false);
@@ -530,7 +530,7 @@ export default function ProfileScreen({
                     {isSubmitting ? (
                       <>
                         <RefreshCw className="w-4 h-4 animate-spin" />
-                        <span>Syncing to Sheet...</span>
+                        <span>Saving profile...</span>
                       </>
                     ) : (
                       <>
@@ -950,7 +950,7 @@ export default function ProfileScreen({
                 {isSavingDocs ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Saving to Sheet...</span>
+                    <span>Saving documents...</span>
                   </>
                 ) : (
                   <>

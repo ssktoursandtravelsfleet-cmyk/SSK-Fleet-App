@@ -79,7 +79,7 @@ export default function HelpSupportScreen({
     },
     {
       question: "My vehicle is not showing.",
-      answer: "Vehicle information is loaded live from the Driver Master sheet in Google Sheets using your ETM ID or registered mobile number. If no vehicle is currently assigned to you, 'Car Not Allotted' will be shown. Please contact your Fleet Manager for vehicle allotment."
+      answer: "Vehicle information is loaded live from fleet records using your ETM ID or registered mobile number. If no vehicle is currently assigned to you, 'Car Not Allotted' will be shown. Please contact your Fleet Manager for vehicle allotment."
     },
     {
       question: "Weekly Hissab is not available.",
@@ -91,11 +91,11 @@ export default function HelpSupportScreen({
     },
     {
       question: "Payment not updated.",
-      answer: "Payments are synced live with our Google Sheets database. In case of network delay, pull down to refresh on the Dashboard or Payment screen to trigger a fresh sync."
+      answer: "Payments are synced live with our database. In case of network delay, pull down to refresh on the Dashboard or Payment screen to trigger a fresh sync."
     },
     {
       question: "Vehicle allotment issue.",
-      answer: "Vehicle allotments and replacements are handled directly by the Branch Office. As soon as a vehicle is assigned to your driver ID in the Master Sheet, it will reflect on your Vehicle screen automatically."
+      answer: "Vehicle allotments and replacements are handled directly by the Branch Office. As soon as a vehicle is assigned to your driver ID in the system, it will reflect on your Vehicle screen automatically."
     }
   ];
 
@@ -439,7 +439,7 @@ export default function HelpSupportScreen({
             {submitSuccess && (
               <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs font-bold flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>Your support ticket has been submitted to Support_Tickets sheet! We will respond shortly.</span>
+                <span>Your support ticket has been submitted successfully! We will respond shortly.</span>
               </div>
             )}
 

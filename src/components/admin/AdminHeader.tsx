@@ -93,8 +93,8 @@ export default function AdminHeader({
         <button
           onClick={onRefresh}
           disabled={isRefreshing}
-          className="p-2 rounded-xl bg-blue-800/80 hover:bg-blue-700 text-white transition-colors focus:outline-none disabled:opacity-50"
-          title="Refresh sheet data"
+          className="p-2 rounded-xl bg-blue-800/80 hover:bg-blue-700 text-white transition-colors focus:outline-none disabled:opacity-50 cursor-pointer"
+          title="Sync and refresh data"
         >
           <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin text-amber-300" : "text-blue-100"}`} />
         </button>

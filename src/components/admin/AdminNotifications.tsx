@@ -107,7 +107,7 @@ export default function AdminNotifications({
             <h2 className="text-base sm:text-lg font-bold text-amber-900">Fleet Notifications & Broadcasts</h2>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Dispatch app alerts, WhatsApp messages, or urgent notices directly to driver accounts and log to Notifications Sheet.
+            Dispatch app alerts, WhatsApp messages, or urgent notices directly to driver accounts and notification logs.
           </p>
         </div>
       </div>

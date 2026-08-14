@@ -6,7 +6,7 @@ import {
   Calendar, 
   User, 
   Hash, 
-  FileSpreadsheet, 
+  FileText, 
   CheckCircle2, 
   AlertCircle, 
   RotateCcw,
@@ -454,14 +454,14 @@ export default function AdminWeeklyHissab({
         <div>
           <div className="flex items-center gap-2">
             <div className="p-2 rounded-xl bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
-              <FileSpreadsheet className="w-5 h-5" />
+              <FileText className="w-5 h-5" />
             </div>
             <h1 className="text-lg sm:text-xl font-black text-[#0A2540] dark:text-white tracking-tight">
-              Weekly Hissab Master Sheet
+              Weekly Hissab Master Ledger
             </h1>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold mt-1">
-            Live exact replica of the <span className="font-bold text-blue-600 dark:text-blue-400">Weekly Hissab</span> Google Sheet tab dataset
+            Live updated records and partner ledger reconciliation
           </p>
         </div>
 
@@ -497,7 +497,7 @@ export default function AdminWeeklyHissab({
             id="btn-admin-refresh-weekly-hissab"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-blue-200" : ""}`} />
-            <span>{isRefreshing ? "Syncing..." : "Sync Live Sheet"}</span>
+            <span>{isRefreshing ? "Syncing..." : "Sync Live Records"}</span>
           </button>
         </div>
       </div>
@@ -640,7 +640,7 @@ export default function AdminWeeklyHissab({
         <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-300">
             <Filter className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-            <span>Sheet Filters</span>
+            <span>Ledger Filters</span>
           </div>
           {hasActiveFilters && (
             <button
@@ -752,7 +752,7 @@ export default function AdminWeeklyHissab({
           {isLoading ? (
             <div className="p-16 text-center flex flex-col items-center justify-center space-y-3">
               <RefreshCw className="w-8 h-8 animate-spin text-blue-600" />
-              <p className="text-xs font-bold text-slate-600 dark:text-slate-300">Loading live data from Weekly_Hissab Google Sheet...</p>
+              <p className="text-xs font-bold text-slate-600 dark:text-slate-300">Loading live Weekly Hissab records...</p>
             </div>
           ) : filteredRows.length === 0 ? (
             <div className="p-16 text-center flex flex-col items-center justify-center space-y-3">
@@ -867,10 +867,10 @@ export default function AdminWeeklyHissab({
         {/* Table Footer / Pagination stats */}
         <div className="p-3 bg-slate-50 dark:bg-slate-900 border-t border-slate-200/80 dark:border-slate-800 flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-slate-400">
           <span>
-            Showing <strong className="text-slate-800 dark:text-slate-200">{filteredRows.length}</strong> of <strong className="text-slate-800 dark:text-slate-200">{dataRows.length}</strong> Google Sheet rows
+            Showing <strong className="text-slate-800 dark:text-slate-200">{filteredRows.length}</strong> of <strong className="text-slate-800 dark:text-slate-200">{dataRows.length}</strong> records
           </span>
           <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
-            Source: Google Sheet "Weekly_Hissab"
+            System Status: Live Synchronized
           </span>
         </div>
 

@@ -699,7 +699,7 @@ export default function PaymentScreen({
               <div className="absolute inset-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xs flex flex-col items-center justify-center rounded-3xl z-10 gap-2">
                 <Loader2 className="w-8 h-8 text-[#0A2540] dark:text-blue-400 animate-spin" />
                 <span className="text-xs font-extrabold text-[#0A2540] dark:text-white">Recording payment...</span>
-                <span className="text-[10px] text-slate-400 font-medium">Updating Google Sheets</span>
+                <span className="text-[10px] text-slate-400 font-medium">Synchronizing payment record...</span>
               </div>
             )}
           </div>

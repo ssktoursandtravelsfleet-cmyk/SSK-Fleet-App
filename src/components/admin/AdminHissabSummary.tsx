@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { 
   RefreshCw, 
   Search, 
-  FileSpreadsheet, 
+  FileText, 
   AlertCircle, 
   CheckCircle2, 
   ChevronDown, 
@@ -16,7 +16,6 @@ import {
   History,
   ChevronLeft,
   ChevronRight,
-  FileText,
   AlertTriangle,
   Filter,
   ShieldCheck
@@ -875,7 +874,7 @@ export default function AdminHissabSummary({
 
       await loadData(true);
     } catch (err: any) {
-      const errMsg = err?.message || String(err) || "Unknown error occurred writing to Google Sheet.";
+      const errMsg = err?.message || String(err) || "Unknown error occurred writing database records.";
       console.error("[HISSAB CSV] Pipeline Failure Error:", err);
 
       setUploadErrorDetails({
@@ -928,14 +927,14 @@ export default function AdminHissabSummary({
           <div>
             <div className="flex items-center gap-2.5">
               <div className="p-2.5 rounded-2xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-900/40">
-                <FileSpreadsheet className="w-6 h-6" />
+                <FileText className="w-6 h-6" />
               </div>
               <div>
                 <h2 className="text-xl font-black text-slate-800 dark:text-white tracking-tight flex items-center gap-2">
                   Hissab Summary
                   <span className="px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-300/40 flex items-center gap-1">
                     <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                    Google Sheet: Hissab Summary
+                    Live Ledger
                   </span>
                   {!isUserAuthorized && (
                     <span className="px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider rounded-full bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-300/40 flex items-center gap-1">
@@ -945,7 +944,7 @@ export default function AdminHissabSummary({
                   )}
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
-                  Live data from Google Sheet → <span className="font-bold text-slate-700 dark:text-slate-300">Hissab Summary</span>
+                  Live updated records and financial reconciliation ledger
                 </p>
               </div>
             </div>
@@ -953,7 +952,7 @@ export default function AdminHissabSummary({
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2.5 flex-wrap">
-            {/* Google OAuth Connection Badge */}
+            {/* Cloud Sync Connection Badge */}
             <div className={`px-3 py-2 rounded-2xl border flex items-center gap-2 text-xs font-semibold ${
               googleAuth.isAuthenticated
                 ? "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60"
@@ -962,8 +961,8 @@ export default function AdminHissabSummary({
               <div className={`w-2 h-2 rounded-full shrink-0 ${googleAuth.isAuthenticated ? "bg-emerald-500 shadow-xs" : "bg-amber-500 animate-pulse"}`} />
               <span className="hidden sm:inline">
                 {googleAuth.isAuthenticated
-                  ? `Google Sheets: ${googleAuth.userEmail || "Connected"}`
-                  : "Google OAuth: Not Connected"}
+                  ? `Cloud Sync: ${googleAuth.userEmail || "Connected"}`
+                  : "Cloud Sync: Not Connected"}
               </span>
               <span className="sm:hidden">
                 {googleAuth.isAuthenticated ? "Connected" : "Not Connected"}
@@ -1158,7 +1157,7 @@ export default function AdminHissabSummary({
             <div>
               <h4 className="text-sm font-extrabold">Connection Error</h4>
               <p className="text-xs font-medium text-rose-700 dark:text-rose-300 mt-0.5">
-                Unable to load Hissab Summary from Google Sheet. Please try Sync / Refresh.
+                Unable to load Hissab Summary records. Please try Sync / Refresh.
               </p>
             </div>
           </div>
@@ -1183,19 +1182,19 @@ export default function AdminHissabSummary({
             ))}
           </div>
           <p className="text-center text-xs font-bold text-slate-400 py-2">
-            Loading live Hissab Summary data from Google Sheet...
+            Loading live Hissab Summary data...
           </p>
         </div>
       ) : dataRecords.length === 0 ? (
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-12 border border-slate-200/80 dark:border-slate-800 shadow-xs text-center">
           <div className="w-16 h-16 mx-auto rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 mb-4">
-            <FileSpreadsheet className="w-8 h-8" />
+            <FileText className="w-8 h-8" />
           </div>
           <h3 className="text-base font-black text-slate-800 dark:text-white">
             No Hissab Summary data available.
           </h3>
           <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-            The Google Sheet tab <span className="font-semibold text-slate-600 dark:text-slate-300">"Hissab Summary"</span> is empty or unavailable.
+            Hissab Summary records are currently empty or unavailable.
           </p>
           <button
             type="button"
@@ -1284,7 +1283,7 @@ export default function AdminHissabSummary({
                                     onClick={handleSaveCellEdit}
                                     disabled={isSavingCell}
                                     className="p-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors cursor-pointer"
-                                    title="Save to Google Sheet"
+                                    title="Save Changes"
                                   >
                                     <Check className="w-3.5 h-3.5" />
                                   </button>
@@ -1517,7 +1516,7 @@ export default function AdminHissabSummary({
                     Upload CSV to Hissab Summary
                   </h3>
                   <p className="text-xs text-slate-400 font-medium">
-                    Target Sheet: <span className="font-bold text-slate-700 dark:text-slate-300">Google Sheet → Hissab Summary</span>
+                    Target Module: <span className="font-bold text-slate-700 dark:text-slate-300">Hissab Summary Ledger</span>
                   </p>
                 </div>
               </div>
@@ -1540,7 +1539,7 @@ export default function AdminHissabSummary({
               </button>
             </div>
 
-            {/* Google OAuth Authorization Banner inside Modal */}
+            {/* Cloud Authorization Banner inside Modal */}
             <div className={`p-3 rounded-2xl border flex items-center justify-between gap-3 text-xs ${
               googleAuth.isAuthenticated
                 ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800"
@@ -1550,8 +1549,8 @@ export default function AdminHissabSummary({
                 <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${googleAuth.isAuthenticated ? "bg-emerald-500" : "bg-amber-500 animate-pulse"}`} />
                 <span className="font-semibold">
                   {googleAuth.isAuthenticated
-                    ? `Google Sheets Authorized${googleAuth.userEmail ? ` (${googleAuth.userEmail})` : ""}`
-                    : "Google Sheets Authorization: Required for writing updates"}
+                    ? `Cloud Sync Authorized${googleAuth.userEmail ? ` (${googleAuth.userEmail})` : ""}`
+                    : "Cloud Authorization: Required for writing updates"}
                 </span>
               </div>
               {!googleAuth.isAuthenticated && (
@@ -1562,7 +1561,7 @@ export default function AdminHissabSummary({
                   className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] shadow-xs cursor-pointer flex items-center gap-1.5 shrink-0"
                 >
                   {isConnectingGoogle && <RefreshCw className="w-3 h-3 animate-spin" />}
-                  <span>Sign In with Google</span>
+                  <span>Sign In</span>
                 </button>
               )}
             </div>
@@ -1573,21 +1572,21 @@ export default function AdminHissabSummary({
                 <div className="bg-emerald-50 dark:bg-emerald-950/90 border border-emerald-300 dark:border-emerald-800 p-5 rounded-2xl text-emerald-900 dark:text-emerald-100 space-y-3">
                   <div className="flex items-center gap-2 font-black text-sm text-emerald-700 dark:text-emerald-300">
                     <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0" />
-                    <span>CSV Upload & Google Sheet Write Successful!</span>
+                    <span>CSV Upload & Ledger Sync Successful!</span>
                   </div>
 
                   <p className="text-xs text-emerald-800 dark:text-emerald-200">
-                    All valid records have been verified and written to Google Sheet <span className="font-bold underline">{uploadSuccessDetails.targetSheet}</span> at the top.
+                    All valid records have been verified and synced to the database at the top.
                   </p>
 
                   <div className="text-xs space-y-1.5 font-mono text-emerald-800 dark:text-emerald-200 bg-white/70 dark:bg-black/30 p-3.5 rounded-xl border border-emerald-200 dark:border-emerald-900">
-                    <p><span className="font-bold text-slate-700 dark:text-slate-300">Target Sheet:</span> {uploadSuccessDetails.targetSheet}</p>
+                    <p><span className="font-bold text-slate-700 dark:text-slate-300">Target Module:</span> Hissab Summary</p>
                     <p><span className="font-bold text-slate-700 dark:text-slate-300">Total CSV Rows:</span> {uploadSuccessDetails.csvRows}</p>
                     <p><span className="font-bold text-slate-700 dark:text-slate-300">Valid Mapped Rows:</span> {uploadSuccessDetails.validRows}</p>
                     <p><span className="font-bold text-slate-700 dark:text-slate-300">New Records Inserted at Top:</span> {uploadSuccessDetails.newRecords}</p>
                     <p><span className="font-bold text-slate-700 dark:text-slate-300">Duplicates Handled:</span> {uploadSuccessDetails.duplicates}</p>
                     <p><span className="font-bold text-emerald-700 dark:text-emerald-300">Total Rows Written / Verified:</span> {uploadSuccessDetails.rowsWritten}</p>
-                    <p><span className="font-bold text-emerald-700 dark:text-emerald-300">Google Sheet Verification:</span> PASSED ✓</p>
+                    <p><span className="font-bold text-emerald-700 dark:text-emerald-300">Data Verification:</span> PASSED ✓</p>
                   </div>
                 </div>
 
@@ -1640,10 +1639,10 @@ export default function AdminHissabSummary({
                   <div className="bg-rose-50 dark:bg-rose-950/90 border border-rose-300 dark:border-rose-800 p-4 rounded-2xl text-rose-900 dark:text-rose-100 space-y-2.5 animate-fade-in">
                     <div className="flex items-center gap-2 font-black text-xs text-rose-700 dark:text-rose-300">
                       <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
-                      <span>CSV Upload Failed: Unable to write to Google Sheet</span>
+                      <span>CSV Upload Failed: Unable to write records</span>
                     </div>
                     <div className="text-[11px] space-y-1 font-mono text-rose-800 dark:text-rose-200 bg-white/60 dark:bg-black/30 p-3 rounded-xl border border-rose-200 dark:border-rose-900">
-                      <p><span className="font-bold text-slate-700 dark:text-slate-300">Target Sheet:</span> {uploadErrorDetails.targetSheet}</p>
+                      <p><span className="font-bold text-slate-700 dark:text-slate-300">Target Module:</span> Hissab Summary</p>
                       <p><span className="font-bold text-slate-700 dark:text-slate-300">Total CSV Rows:</span> {uploadErrorDetails.csvRows}</p>
                       <p><span className="font-bold text-slate-700 dark:text-slate-300">Valid Mapped Rows:</span> {uploadErrorDetails.validRows}</p>
                       <p><span className="font-bold text-slate-700 dark:text-slate-300">Rows Written:</span> {uploadErrorDetails.rowsWritten}</p>
@@ -1745,7 +1744,7 @@ export default function AdminHissabSummary({
                     Insertion Policy:
                   </p>
                   <p className="text-[11px] text-blue-800 dark:text-blue-300 leading-relaxed">
-                    New CSV records will be inserted <span className="font-bold uppercase underline">at the TOP</span> of the Google Sheet (immediately below Row 1 Header). Existing records will remain preserved below.
+                    New CSV records will be inserted <span className="font-bold uppercase underline">at the TOP</span> of the ledger. Existing records will remain preserved below.
                   </p>
                 </div>
 
@@ -1804,7 +1803,7 @@ export default function AdminHissabSummary({
                     className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-extrabold shadow-md transition-all cursor-pointer flex items-center gap-2"
                   >
                     {isUploadingCsv && <RefreshCw className="w-4 h-4 animate-spin" />}
-                    <span>Confirm & Upload to Google Sheet</span>
+                    <span>Confirm & Upload Records</span>
                   </button>
                 </div>
               </div>

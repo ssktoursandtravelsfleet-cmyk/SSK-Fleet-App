@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { motion } from "motion/react";
 import {
   BarChart3,
-  FileSpreadsheet,
+  Download,
   FileText,
   Calendar,
   Users,
@@ -98,8 +98,8 @@ export default function AdminReports({ drivers = [], vehicles = [] }: AdminRepor
 
   const filteredDrivers = drivers.filter(d => filterByDate(d.registrationDate));
 
-  // Export CSV
-  const exportToExcelCSV = () => {
+  // Export Data File
+  const exportReportData = () => {
     let headers: string[] = [];
     let rows: (string | number)[][] = [];
 
@@ -217,22 +217,22 @@ export default function AdminReports({ drivers = [], vehicles = [] }: AdminRepor
             <h2 className="text-base sm:text-lg font-bold text-emerald-900">Fleet Analytics & Category Reports</h2>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Filter fleet reports by custom week ranges and export to Excel, CSV, or PDF.
+            Filter fleet reports by custom week ranges and export or print data.
           </p>
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <button
-            onClick={exportToExcelCSV}
-            className="flex-1 sm:flex-none px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm transition-colors flex items-center justify-center gap-1.5"
+            onClick={exportReportData}
+            className="flex-1 sm:flex-none px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
           >
-            <FileSpreadsheet className="w-4 h-4" />
-            <span>Excel / CSV</span>
+            <Download className="w-4 h-4" />
+            <span>Export Data</span>
           </button>
 
           <button
             onClick={exportToPDF}
-            className="flex-1 sm:flex-none px-3.5 py-2 bg-[#0D47A1] hover:bg-blue-800 text-white font-bold text-xs rounded-xl shadow-sm transition-colors flex items-center justify-center gap-1.5"
+            className="flex-1 sm:flex-none px-3.5 py-2 bg-[#0D47A1] hover:bg-blue-800 text-white font-bold text-xs rounded-xl shadow-sm transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
           >
             <FileText className="w-4 h-4" />
             <span>Print PDF</span>
