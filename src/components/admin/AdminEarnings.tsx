@@ -225,8 +225,9 @@ export default function AdminEarnings({ accessToken }: AdminEarningsProps) {
     };
   }, [headers]);
 
-  // Aggregate KPI summary stats
+  // Aggregate KPI summary stats strictly based on specific column rules
   const kpiStats = useMemo(() => {
+    let totalDrivers = 0;
     let totalEarnings = 0;
     let totalCash = 0;
     let totalOnlinePayout = 0;
@@ -235,28 +236,54 @@ export default function AdminEarnings({ accessToken }: AdminEarningsProps) {
     let totalTrips = 0;
 
     rawRows.forEach(row => {
-      if (colIndices.totalEarnings >= 0 && row[colIndices.totalEarnings]) {
-        totalEarnings += parseNum(row[colIndices.totalEarnings]);
+      // 1. DRIVERS: Count only rows where Column A has a non-empty value
+      const colAVal = row[0] !== undefined ? String(row[0] ?? "").trim() : "";
+      if (colAVal.length > 0) {
+        totalDrivers++;
       }
-      if (colIndices.uberCash >= 0 && row[colIndices.uberCash]) {
-        totalCash += parseNum(row[colIndices.uberCash]);
+
+      // Total Earnings: Column K (index 10)
+      const earnIdx = colIndices.totalEarnings >= 0 ? colIndices.totalEarnings : 10;
+      if (row[earnIdx]) {
+        totalEarnings += parseNum(row[earnIdx]);
       }
-      if (colIndices.onlinePayout >= 0 && row[colIndices.onlinePayout]) {
-        totalOnlinePayout += parseNum(row[colIndices.onlinePayout]);
+
+      // Uber Cash: Column L (index 11)
+      const cashIdx = colIndices.uberCash >= 0 ? colIndices.uberCash : 11;
+      if (row[cashIdx]) {
+        totalCash += parseNum(row[cashIdx]);
       }
-      if (colIndices.recovery >= 0 && row[colIndices.recovery]) {
-        totalRecovery += parseNum(row[colIndices.recovery]);
+
+      // Online Payout: Column P (index 15)
+      const payoutIdx = colIndices.onlinePayout >= 0 ? colIndices.onlinePayout : 15;
+      if (row[payoutIdx]) {
+        totalOnlinePayout += parseNum(row[payoutIdx]);
       }
-      if (colIndices.currentOs >= 0 && row[colIndices.currentOs]) {
-        totalOs += parseNum(row[colIndices.currentOs]);
+
+      // 2. TOTAL RECOVERY: Calculate strictly from Column R (index 17)
+      const recoveryIdx = colIndices.recovery >= 0 ? colIndices.recovery : 17;
+      if (row[recoveryIdx]) {
+        totalRecovery += parseNum(row[recoveryIdx]);
       }
-      if (colIndices.trips >= 0 && row[colIndices.trips]) {
-        totalTrips += parseNum(row[colIndices.trips]);
+
+      // 3. TOTAL O/S: Calculate strictly from Column S (index 18) - ONLY NEGATIVE VALUES
+      const osIdx = colIndices.currentOs >= 0 ? colIndices.currentOs : 18;
+      if (row[osIdx]) {
+        const val = parseNum(row[osIdx]);
+        if (val < 0) {
+          totalOs += val;
+        }
+      }
+
+      // Trips: Column G (index 6)
+      const tripIdx = colIndices.trips >= 0 ? colIndices.trips : 6;
+      if (row[tripIdx]) {
+        totalTrips += parseNum(row[tripIdx]);
       }
     });
 
     return {
-      totalRecords: rawRows.length,
+      totalDrivers,
       totalEarnings,
       totalCash,
       totalOnlinePayout,
@@ -419,7 +446,7 @@ export default function AdminEarnings({ accessToken }: AdminEarningsProps) {
             <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Drivers</span>
             <UsersIcon className="w-4 h-4 text-blue-600" />
           </div>
-          <div className="text-lg font-bold text-slate-900">{kpiStats.totalRecords.toLocaleString("en-IN")}</div>
+          <div className="text-lg font-bold text-slate-900">{kpiStats.totalDrivers.toLocaleString("en-IN")}</div>
           <div className="text-[10px] text-slate-500">Total Active Drivers</div>
         </div>
 
@@ -467,7 +494,7 @@ export default function AdminEarnings({ accessToken }: AdminEarningsProps) {
             <FileSpreadsheet className="w-4 h-4 text-rose-600" />
           </div>
           <div className={`text-lg font-bold ${kpiStats.totalOs < 0 ? "text-rose-600" : "text-slate-900"}`}>
-            {kpiStats.totalOs < 0 ? `-₹${Math.abs(kpiStats.totalOs).toLocaleString("en-IN")}` : `₹${kpiStats.totalOs.toLocaleString("en-IN")}`}
+            {kpiStats.totalOs < 0 ? `-₹${Math.abs(kpiStats.totalOs).toLocaleString("en-IN")}` : "₹0"}
           </div>
           <div className="text-[10px] text-slate-500">Current Balance</div>
         </div>
