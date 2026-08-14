@@ -93,6 +93,64 @@ function isCurrencyHeader(headerStr: string): boolean {
   );
 }
 
+/**
+ * Helper to get clean, proportional column width classes matching source structure
+ */
+function getColumnWidthClass(colIdx: number, headerName: string): string {
+  const h = String(headerName || "").toLowerCase();
+  
+  if (h.includes("ssk id") || h.includes("sskid") || colIdx === 0) {
+    return "w-28 min-w-[100px]";
+  }
+  if (h.includes("etm") || colIdx === 1) {
+    return "w-28 min-w-[100px]";
+  }
+  if (h.includes("name") || h.includes("driver") || colIdx === 2) {
+    return "w-52 min-w-[190px]";
+  }
+  if (h.includes("car") || h.includes("vehicle") || colIdx === 3) {
+    return "w-36 min-w-[130px]";
+  }
+  if (h.includes("days") || colIdx === 4 || colIdx === 5) {
+    return "w-32 min-w-[115px]";
+  }
+  if (h.includes("trip") || colIdx === 6) {
+    return "w-24 min-w-[85px]";
+  }
+  if (h.includes("rent") || colIdx === 7 || colIdx === 8) {
+    return "w-36 min-w-[130px]";
+  }
+  if (h.includes("insurance") || colIdx === 9) {
+    return "w-32 min-w-[115px]";
+  }
+  if (h.includes("total earnings") || colIdx === 10) {
+    return "w-40 min-w-[145px]";
+  }
+  if (h.includes("cash") || colIdx === 11) {
+    return "w-36 min-w-[135px]";
+  }
+  if (h.includes("tip") || colIdx === 12) {
+    return "w-28 min-w-[95px]";
+  }
+  if (h.includes("toll") || colIdx === 13) {
+    return "w-32 min-w-[110px]";
+  }
+  if (h.includes("pass") || colIdx === 14) {
+    return "w-32 min-w-[115px]";
+  }
+  if (h.includes("payout") || colIdx === 15) {
+    return "w-40 min-w-[145px]";
+  }
+  if (h.includes("recovery") || colIdx === 16 || colIdx === 17) {
+    return "w-36 min-w-[130px]";
+  }
+  if (h.includes("o/s") || h.includes("os") || colIdx === 18) {
+    return "w-40 min-w-[145px]";
+  }
+
+  return "min-w-[120px]";
+}
+
 export default function AdminEarnings({ accessToken }: AdminEarningsProps) {
   const [headers, setHeaders] = useState<string[]>([]);
   const [rawRows, setRawRows] = useState<string[][]>([]);
@@ -108,7 +166,7 @@ export default function AdminEarnings({ accessToken }: AdminEarningsProps) {
   const [pageSize, setPageSize] = useState<number>(25);
   const [currentPage, setCurrentPage] = useState<number>(1);
 
-  // Load Daily_Hissab!A:S data
+  // Load Daily Earnings data
   const loadData = async (force: boolean = false) => {
     try {
       if (force) {
@@ -128,8 +186,8 @@ export default function AdminEarnings({ accessToken }: AdminEarningsProps) {
       setRawRows(safeRows);
       setLastUpdated(new Date());
     } catch (err: any) {
-      console.error("Error loading Daily_Hissab!A:S earnings data:", err);
-      setError(err?.message || "Failed to load Earnings data from Google Sheets Daily_Hissab");
+      console.error("Error loading daily earnings data:", err);
+      setError(err?.message || "Failed to load Earnings data. Please try again.");
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -280,7 +338,7 @@ export default function AdminEarnings({ accessToken }: AdminEarningsProps) {
     }
   };
 
-  // Export strictly Columns A:S to CSV
+  // Export data to CSV
   const handleExportCSV = () => {
     if (headers.length === 0 || rawRows.length === 0) return;
 
@@ -297,7 +355,7 @@ export default function AdminEarnings({ accessToken }: AdminEarningsProps) {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Daily_Hissab_Earnings_A_S_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute("download", `Daily_Earnings_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -317,11 +375,11 @@ export default function AdminEarnings({ accessToken }: AdminEarningsProps) {
                 <h2 className="text-xl font-bold tracking-tight text-white">Daily Earnings</h2>
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
                   <CheckCircle2 className="w-3 h-3" />
-                  Daily_Hissab!A:S
+                  Live Data
                 </span>
               </div>
               <p className="text-xs text-blue-200">
-                Direct live synchronization of Column A through Column S from Daily_Hissab
+                Daily earnings and driver performance records
               </p>
             </div>
           </div>
@@ -336,17 +394,17 @@ export default function AdminEarnings({ accessToken }: AdminEarningsProps) {
           <button
             onClick={() => loadData(true)}
             disabled={isLoading || isRefreshing}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-xs font-medium text-white transition-all border border-white/15 disabled:opacity-50"
-            title="Refresh Daily_Hissab Sheet Data"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-xs font-medium text-white transition-all border border-white/15 disabled:opacity-50 cursor-pointer"
+            title="Refresh Earnings Data"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-emerald-400" : ""}`} />
-            <span>{isRefreshing ? "Refreshing..." : "Sync Sheet"}</span>
+            <span>{isRefreshing ? "Refreshing..." : "Refresh Data"}</span>
           </button>
           <button
             onClick={handleExportCSV}
             disabled={isLoading || rawRows.length === 0}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-xs font-semibold text-white transition-all shadow-sm disabled:opacity-50"
-            title="Download CSV (Columns A:S)"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-xs font-semibold text-white transition-all shadow-sm disabled:opacity-50 cursor-pointer"
+            title="Export CSV"
           >
             <Download className="w-3.5 h-3.5" />
             <span>Export CSV</span>
@@ -358,11 +416,11 @@ export default function AdminEarnings({ accessToken }: AdminEarningsProps) {
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
           <div className="flex items-center justify-between text-slate-400 mb-1">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Records</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Drivers</span>
             <UsersIcon className="w-4 h-4 text-blue-600" />
           </div>
           <div className="text-lg font-bold text-slate-900">{kpiStats.totalRecords.toLocaleString("en-IN")}</div>
-          <div className="text-[10px] text-slate-500">Drivers in Daily_Hissab</div>
+          <div className="text-[10px] text-slate-500">Total Active Drivers</div>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
@@ -371,7 +429,7 @@ export default function AdminEarnings({ accessToken }: AdminEarningsProps) {
             <Coins className="w-4 h-4 text-emerald-600" />
           </div>
           <div className="text-lg font-bold text-emerald-700">₹{kpiStats.totalEarnings.toLocaleString("en-IN")}</div>
-          <div className="text-[10px] text-slate-500">Column K (Total Earnings)</div>
+          <div className="text-[10px] text-slate-500">Total Gross Earnings</div>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
@@ -382,7 +440,7 @@ export default function AdminEarnings({ accessToken }: AdminEarningsProps) {
           <div className="text-lg font-bold text-slate-900">
             {kpiStats.totalCash < 0 ? `-₹${Math.abs(kpiStats.totalCash).toLocaleString("en-IN")}` : `₹${kpiStats.totalCash.toLocaleString("en-IN")}`}
           </div>
-          <div className="text-[10px] text-slate-500">Column L (Cash Earnings)</div>
+          <div className="text-[10px] text-slate-500">Collected Cash</div>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
@@ -391,7 +449,7 @@ export default function AdminEarnings({ accessToken }: AdminEarningsProps) {
             <TrendingUp className="w-4 h-4 text-indigo-600" />
           </div>
           <div className="text-lg font-bold text-indigo-700">₹{kpiStats.totalOnlinePayout.toLocaleString("en-IN")}</div>
-          <div className="text-[10px] text-slate-500">Column P (Driver Payout)</div>
+          <div className="text-[10px] text-slate-500">Net Online Payout</div>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
@@ -400,7 +458,7 @@ export default function AdminEarnings({ accessToken }: AdminEarningsProps) {
             <RefreshCw className="w-4 h-4 text-purple-600" />
           </div>
           <div className="text-lg font-bold text-purple-700">₹{kpiStats.totalRecovery.toLocaleString("en-IN")}</div>
-          <div className="text-[10px] text-slate-500">Column R (Recovery Total)</div>
+          <div className="text-[10px] text-slate-500">Total Recovery</div>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
@@ -411,7 +469,7 @@ export default function AdminEarnings({ accessToken }: AdminEarningsProps) {
           <div className={`text-lg font-bold ${kpiStats.totalOs < 0 ? "text-rose-600" : "text-slate-900"}`}>
             {kpiStats.totalOs < 0 ? `-₹${Math.abs(kpiStats.totalOs).toLocaleString("en-IN")}` : `₹${kpiStats.totalOs.toLocaleString("en-IN")}`}
           </div>
-          <div className="text-[10px] text-slate-500">Column S (Current O/S)</div>
+          <div className="text-[10px] text-slate-500">Current Balance</div>
         </div>
       </div>
 
@@ -441,7 +499,7 @@ export default function AdminEarnings({ accessToken }: AdminEarningsProps) {
           <div className="flex items-center bg-slate-100 p-1 rounded-xl">
             <button
               onClick={() => setFilterType("ALL")}
-              className={`px-3 py-1 text-xs font-medium rounded-lg transition-all ${
+              className={`px-3 py-1 text-xs font-medium rounded-lg transition-all cursor-pointer ${
                 filterType === "ALL" ? "bg-white text-[#0A3880] shadow-2xs font-semibold" : "text-slate-600 hover:text-slate-900"
               }`}
             >
@@ -449,7 +507,7 @@ export default function AdminEarnings({ accessToken }: AdminEarningsProps) {
             </button>
             <button
               onClick={() => setFilterType("WITH_EARNINGS")}
-              className={`px-3 py-1 text-xs font-medium rounded-lg transition-all ${
+              className={`px-3 py-1 text-xs font-medium rounded-lg transition-all cursor-pointer ${
                 filterType === "WITH_EARNINGS" ? "bg-white text-[#0A3880] shadow-2xs font-semibold" : "text-slate-600 hover:text-slate-900"
               }`}
             >
@@ -457,7 +515,7 @@ export default function AdminEarnings({ accessToken }: AdminEarningsProps) {
             </button>
             <button
               onClick={() => setFilterType("WITH_PAYOUT")}
-              className={`px-3 py-1 text-xs font-medium rounded-lg transition-all ${
+              className={`px-3 py-1 text-xs font-medium rounded-lg transition-all cursor-pointer ${
                 filterType === "WITH_PAYOUT" ? "bg-white text-[#0A3880] shadow-2xs font-semibold" : "text-slate-600 hover:text-slate-900"
               }`}
             >
@@ -465,7 +523,7 @@ export default function AdminEarnings({ accessToken }: AdminEarningsProps) {
             </button>
             <button
               onClick={() => setFilterType("WITH_OS")}
-              className={`px-3 py-1 text-xs font-medium rounded-lg transition-all ${
+              className={`px-3 py-1 text-xs font-medium rounded-lg transition-all cursor-pointer ${
                 filterType === "WITH_OS" ? "bg-white text-[#0A3880] shadow-2xs font-semibold" : "text-slate-600 hover:text-slate-900"
               }`}
             >
@@ -478,7 +536,7 @@ export default function AdminEarnings({ accessToken }: AdminEarningsProps) {
             <select
               value={pageSize}
               onChange={(e) => setPageSize(Number(e.target.value))}
-              className="text-xs py-1 px-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-700 font-medium focus:outline-none focus:border-blue-500"
+              className="text-xs py-1 px-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-700 font-medium focus:outline-none focus:border-blue-500 cursor-pointer"
             >
               <option value={25}>25</option>
               <option value={50}>50</option>
@@ -495,28 +553,28 @@ export default function AdminEarnings({ accessToken }: AdminEarningsProps) {
         {isLoading ? (
           <div className="py-20 flex flex-col items-center justify-center text-slate-400 space-y-3">
             <RefreshCw className="w-8 h-8 animate-spin text-blue-600" />
-            <p className="text-sm font-medium text-slate-600">Reading Daily_Hissab!A:S from Google Sheets...</p>
-            <p className="text-xs text-slate-400">Restricting data strictly to Columns A through S</p>
+            <p className="text-sm font-medium text-slate-600">Loading daily earnings data...</p>
+            <p className="text-xs text-slate-400">Fetching driver performance & hissab records</p>
           </div>
         ) : error ? (
           <div className="p-8 text-center space-y-3">
             <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
               <AlertCircle className="w-6 h-6" />
             </div>
-            <h3 className="text-sm font-bold text-slate-800">Failed to load Daily_Hissab data</h3>
+            <h3 className="text-sm font-bold text-slate-800">Failed to load earnings data</h3>
             <p className="text-xs text-rose-600 max-w-md mx-auto">{error}</p>
             <button
               onClick={() => loadData(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-semibold hover:bg-blue-700 active:scale-95 transition-all shadow-xs"
+              className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-semibold hover:bg-blue-700 active:scale-95 transition-all shadow-xs cursor-pointer"
             >
-              Retry Sync
+              Retry
             </button>
           </div>
         ) : rawRows.length === 0 ? (
           <div className="py-16 text-center space-y-2">
             <FileSpreadsheet className="w-10 h-10 text-slate-300 mx-auto" />
-            <h3 className="text-sm font-bold text-slate-700">No rows found in Daily_Hissab!A:S</h3>
-            <p className="text-xs text-slate-500">The sheet appears to be empty or has no data in Columns A through S.</p>
+            <h3 className="text-sm font-bold text-slate-700">No earnings records found</h3>
+            <p className="text-xs text-slate-500">No daily earnings data is available at this time.</p>
           </div>
         ) : (
           <div>
@@ -524,33 +582,30 @@ export default function AdminEarnings({ accessToken }: AdminEarningsProps) {
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="bg-slate-100/80 border-b border-slate-200">
+                  <tr className="bg-slate-100/90 border-b border-slate-200">
                     <th className="px-3.5 py-3 text-[11px] font-bold text-slate-700 uppercase tracking-wider sticky left-0 bg-slate-100 z-10 w-12 text-center">
                       #
                     </th>
                     {headers.slice(0, 19).map((header, idx) => {
                       const isSorted = sortConfig?.colIndex === idx;
-                      const colLetter = String.fromCharCode(65 + idx);
+                      const widthClass = getColumnWidthClass(idx, header);
                       return (
                         <th
                           key={idx}
                           onClick={() => handleSort(idx)}
-                          className="px-3.5 py-3 text-[11px] font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap cursor-pointer hover:bg-slate-200/80 transition-colors select-none group"
+                          className={`px-3.5 py-3 text-[11px] font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap cursor-pointer hover:bg-slate-200/80 transition-colors select-none group ${widthClass}`}
                         >
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] text-blue-600 font-mono bg-blue-50 px-1 py-0.5 rounded">
-                              {colLetter}
-                            </span>
-                            <span>{header}</span>
-                            <span className="text-slate-400 group-hover:text-slate-700">
+                          <div className="flex items-center justify-between gap-1.5">
+                            <span className="truncate">{header}</span>
+                            <span className="text-slate-400 group-hover:text-slate-700 shrink-0">
                               {isSorted ? (
                                 sortConfig.direction === "asc" ? (
-                                  <ArrowUp className="w-3 h-3 text-blue-600" />
+                                  <ArrowUp className="w-3.5 h-3.5 text-blue-600" />
                                 ) : (
-                                  <ArrowDown className="w-3 h-3 text-blue-600" />
+                                  <ArrowDown className="w-3.5 h-3.5 text-blue-600" />
                                 )
                               ) : (
-                                <ArrowUpDown className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                <ArrowUpDown className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
                               )}
                             </span>
                           </div>
@@ -584,6 +639,7 @@ export default function AdminEarnings({ accessToken }: AdminEarningsProps) {
                             const rawVal = row[colIdx] ?? "";
                             const isCurrency = isCurrencyHeader(headerName);
                             const num = parseNum(rawVal);
+                            const widthClass = getColumnWidthClass(colIdx, headerName);
 
                             // Custom cell rendering based on column type
                             let cellContent: React.ReactNode = rawVal;
@@ -649,7 +705,7 @@ export default function AdminEarnings({ accessToken }: AdminEarningsProps) {
                             return (
                               <td
                                 key={colIdx}
-                                className="px-3.5 py-2.5 text-slate-700 whitespace-nowrap"
+                                className={`px-3.5 py-2.5 text-slate-700 whitespace-nowrap ${widthClass}`}
                               >
                                 {cellContent !== "" && cellContent !== null && cellContent !== undefined ? (
                                   cellContent
@@ -686,7 +742,7 @@ export default function AdminEarnings({ accessToken }: AdminEarningsProps) {
                   <button
                     onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                     disabled={currentPage === 1}
-                    className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-white transition-all"
+                    className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-white transition-all cursor-pointer"
                   >
                     <ChevronLeft className="w-4 h-4" />
                   </button>
@@ -702,7 +758,7 @@ export default function AdminEarnings({ accessToken }: AdminEarningsProps) {
                         <button
                           key={pageNum}
                           onClick={() => setCurrentPage(pageNum)}
-                          className={`w-7 h-7 rounded-lg text-xs font-semibold transition-all ${
+                          className={`w-7 h-7 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                             currentPage === pageNum
                               ? "bg-[#0A3880] text-white shadow-2xs"
                               : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-100"
@@ -717,7 +773,7 @@ export default function AdminEarnings({ accessToken }: AdminEarningsProps) {
                   <button
                     onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                     disabled={currentPage === totalPages}
-                    className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-white transition-all"
+                    className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-white transition-all cursor-pointer"
                   >
                     <ChevronRight className="w-4 h-4" />
                   </button>
@@ -752,3 +808,4 @@ function UsersIcon(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
