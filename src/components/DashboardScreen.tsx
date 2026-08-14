@@ -18,6 +18,7 @@ import {
 import { DriverDetails, NotificationItem, VehicleDocument, TransactionItem } from "../types";
 import { mockVehicleDetails } from "../data";
 import PullToRefresh from "./PullToRefresh";
+import sskLogo from "../assets/logo";
 
 interface DashboardScreenProps {
   driver: DriverDetails;
@@ -159,8 +160,8 @@ export default function DashboardScreen({
               <Menu className="w-5.5 h-5.5" />
             </button>
             <img
-              src="/ssk_logo.png"
-              alt="SSK Logo"
+              src={sskLogo}
+              alt="SSK"
               className="w-8 h-8 sm:w-9 sm:h-9 object-contain shrink-0 drop-shadow-sm"
               referrerPolicy="no-referrer"
             />

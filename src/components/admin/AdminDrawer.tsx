@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { AdminScreen } from "../../types";
 import { DISPLAY_VERSION } from "../../lib/version";
+import sskLogo from "../../assets/logo";
 
 interface AdminDrawerProps {
   isOpen: boolean;
@@ -128,8 +129,8 @@ export default function AdminDrawer({
           {!isCollapsed ? (
             <div className="flex items-center gap-2.5 min-w-0">
               <img
-                src="/ssk_logo.png"
-                alt="SSK Logo"
+                src={sskLogo}
+                alt="SSK"
                 className="w-9 h-9 object-contain shrink-0 drop-shadow-sm"
                 referrerPolicy="no-referrer"
               />
@@ -141,8 +142,8 @@ export default function AdminDrawer({
             </div>
           ) : (
             <img
-              src="/ssk_logo.png"
-              alt="SSK Logo"
+              src={sskLogo}
+              alt="SSK"
               className="w-8 h-8 object-contain shrink-0 mx-auto"
               referrerPolicy="no-referrer"
             />
@@ -237,8 +238,8 @@ export default function AdminDrawer({
               <div className="px-4 pt-[calc(1rem+env(safe-area-inset-top,0px))] pb-4 bg-[#0A3880] flex items-center justify-between border-b border-blue-800">
                 <div className="flex items-center gap-2.5 min-w-0">
                   <img
-                    src="/ssk_logo.png"
-                    alt="SSK Logo"
+                    src={sskLogo}
+                    alt="SSK"
                     className="w-8 h-8 object-contain shrink-0 drop-shadow-sm"
                     referrerPolicy="no-referrer"
                   />

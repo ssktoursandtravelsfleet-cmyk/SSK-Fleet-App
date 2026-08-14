@@ -12,6 +12,7 @@ import AdminNotifications from "./AdminNotifications";
 import AdminSettings from "./AdminSettings";
 import AdminWeeklyHissab from "./AdminWeeklyHissab";
 import AdminHissabSummary from "./AdminHissabSummary";
+import AdminEarnings from "./AdminEarnings";
 import WeeklyHissabScreen from "../WeeklyHissabScreen";
 import {
   fetchAllAdminData,
@@ -357,7 +358,7 @@ export default function AdminPanelContainer({
         )}
 
         {activeScreen === AdminScreen.EARNINGS && (
-          <AdminReports drivers={drivers} vehicles={vehicles} />
+          <AdminEarnings accessToken={accessToken} />
         )}
 
         {activeScreen === AdminScreen.OUTSTANDING && (

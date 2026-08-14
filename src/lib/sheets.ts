@@ -333,7 +333,11 @@ export function parseEarningsSheetRows(
 }
 
 export async function fetchSheetValuesPublic(spreadsheetId: string, sheetName: string): Promise<string[][]> {
-  const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
+  let url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
+  if (sheetName.includes("!")) {
+    const [sheet, range] = sheetName.split("!");
+    url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheet)}&range=${encodeURIComponent(range)}`;
+  }
   const res = await fetch(url);
   if (!res.ok) {
     throw new Error(`Public CSV fetch failed with status ${res.status}`);
@@ -3149,6 +3153,60 @@ export async function fetchHissabSummarySheet(accessToken?: string | null, force
     return rows || [];
   } catch (err) {
     console.error("Failed fetching Hissab Summary sheet:", err);
+    throw err;
+  }
+}
+
+/**
+ * Fetch Earnings data exclusively from "Daily_Hissab!A:S"
+ * Strictly limits range and columns to A through S (max 19 columns: A=0 to S=18).
+ * Nothing from Column T onward is ever fetched, processed, or returned.
+ */
+export async function fetchDailyHissabEarningsSheet(
+  accessToken?: string | null,
+  forceRefresh: boolean = false
+): Promise<{ headers: string[]; rows: string[][] }> {
+  if (forceRefresh) {
+    clearSheetCache();
+  }
+  try {
+    validateConfig(SPREADSHEET_ID);
+    // Fetch ONLY range A:S from Daily_Hissab
+    let rawRows = await fetchSheetValues(SPREADSHEET_ID, "Daily_Hissab!A:S", accessToken).catch(() => []);
+    if (!rawRows || rawRows.length === 0) {
+      rawRows = await fetchSheetValues(SPREADSHEET_ID, "Daily Hissab!A:S", accessToken).catch(() => []);
+    }
+    if (!rawRows || rawRows.length === 0) {
+      rawRows = await fetchSheetValues(SPREADSHEET_ID, "Daily_Hissab", accessToken).catch(() => []);
+    }
+
+    if (!rawRows || rawRows.length === 0) {
+      return { headers: [], rows: [] };
+    }
+
+    // STRICT LIMIT: Max 19 columns (Column A to Column S)
+    const MAX_COLS = 19;
+    const cleanSlices = rawRows.map(r => (Array.isArray(r) ? r.slice(0, MAX_COLS) : []));
+
+    // Dynamic headers from row 0
+    const rawHeaders = cleanSlices[0] || [];
+    const headers = rawHeaders.slice(0, MAX_COLS).map((h, idx) => {
+      const trimmed = String(h || "").trim();
+      return trimmed || `Column ${String.fromCharCode(65 + idx)}`;
+    });
+
+    // Dynamic data rows: filter out completely empty/blank rows
+    const dataRows = cleanSlices.slice(1).filter(r => {
+      if (!r || r.length === 0) return false;
+      return r.some(cell => String(cell || "").trim().length > 0);
+    });
+
+    return {
+      headers,
+      rows: dataRows
+    };
+  } catch (err) {
+    console.error("Failed fetching Daily_Hissab!A:S for Earnings tab:", err);
     throw err;
   }
 }

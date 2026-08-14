@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Phone, Lock, Eye, EyeOff, ArrowRight, ShieldCheck, Check, Fingerprint, ScanFace, Sparkles, X, AlertCircle } from "lucide-react";
 import mumbaiLandscapeImg from "../assets/images/mumbai_landscape_1783220079853.jpg";
+import sskLogo from "../assets/logo";
 
 interface LoginScreenProps {
   phoneNumber: string;
@@ -193,8 +194,8 @@ export default function LoginScreen({
       {/* Top Header Section with Official SSK Logo */}
       <div className="flex flex-col items-center justify-center pt-2 pb-2">
         <img
-          src="/ssk_logo.png"
-          alt="SSK Tours & Travels Logo"
+          src={sskLogo}
+          alt="SSK Tours & Travels"
           className="w-24 h-24 object-contain mb-1 drop-shadow-md"
           referrerPolicy="no-referrer"
         />

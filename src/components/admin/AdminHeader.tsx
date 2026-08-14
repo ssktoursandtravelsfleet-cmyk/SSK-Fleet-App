@@ -1,6 +1,7 @@
 import React from "react";
 import { Menu, RefreshCw, ShieldCheck, UserCheck, Bell, ChevronLeft } from "lucide-react";
 import { AdminScreen } from "../../types";
+import sskLogo from "../../assets/logo";
 
 interface AdminHeaderProps {
   onOpenDrawer: () => void;
@@ -61,8 +62,8 @@ export default function AdminHeader({
 
         <div className="flex items-center gap-2">
           <img
-            src="/ssk_logo.png"
-            alt="SSK Logo"
+            src={sskLogo}
+            alt="SSK"
             className="w-7 h-7 sm:w-8 sm:h-8 object-contain shrink-0 drop-shadow-xs"
             referrerPolicy="no-referrer"
           />

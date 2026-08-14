@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
 import { motion } from "motion/react";
+import sskLogo from "../assets/logo";
 
 interface SplashScreenProps {
   onComplete: () => void;
@@ -32,8 +33,8 @@ export default function SplashScreen({ onComplete }: SplashScreenProps) {
           className="mb-4"
         >
           <img
-            src="/ssk_logo.png"
-            alt="SSK Tours & Travels Logo"
+            src={sskLogo}
+            alt="SSK Tours & Travels"
             className="w-36 h-36 object-contain drop-shadow-2xl"
             referrerPolicy="no-referrer"
           />

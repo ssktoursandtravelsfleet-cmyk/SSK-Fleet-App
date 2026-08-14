@@ -20,6 +20,7 @@ import {
   IdCard
 } from "lucide-react";
 import { DriverDocumentRecord } from "../types";
+import sskLogo from "../assets/logo";
 
 interface OnboardingScreenProps {
   initialPhone: string;
@@ -319,8 +320,8 @@ export default function OnboardingScreen({
         </button>
         <div className="text-center flex-1 pr-6 flex items-center justify-center gap-2">
           <img
-            src="/ssk_logo.png"
-            alt="SSK Logo"
+            src={sskLogo}
+            alt="SSK"
             className="w-7 h-7 object-contain shrink-0 drop-shadow-sm"
             referrerPolicy="no-referrer"
           />
