@@ -1,6 +1,12 @@
 import { AdminDriverItem } from "../types";
 import { SPREADSHEET_ID, validateConfig, fetchAllAdminData, fetchSheetValues, clearSheetCache } from "./sheets";
-import { googleSignIn } from "../firebase";
+import { 
+  getValidAccessToken, 
+  requestGoogleOAuthSignIn, 
+  executeWithGoogleAuthRetry,
+  hasValidGoogleAccessToken,
+  getGoogleAuthState
+} from "./googleAuth";
 
 const IS_DEV = import.meta.env?.DEV ?? process.env.NODE_ENV !== "production";
 
@@ -44,15 +50,17 @@ export function getVerificationStatus(driver: Partial<AdminDriverItem> | any): "
 }
 
 /**
- * Resolves access token from parameter or localStorage.
+ * Resolves access token from active auth session or passed parameter.
  */
 function getEffectiveAccessToken(accessToken?: string | null): string {
   if (accessToken && accessToken.trim()) return accessToken;
+  const state = getGoogleAuthState();
+  if (state.accessToken) return state.accessToken;
   if (typeof window !== "undefined") {
     return (
+      sessionStorage.getItem("ssk_google_oauth_token") ||
       localStorage.getItem("google_access_token") ||
       localStorage.getItem("access_token") ||
-      localStorage.getItem("token") ||
       ""
     );
   }
@@ -60,23 +68,26 @@ function getEffectiveAccessToken(accessToken?: string | null): string {
 }
 
 /**
- * Ensures access token exists. If missing from storage and props, prompts user for Google Sign-In.
+ * Ensures a valid access token exists. If missing or expired, requests sign-in or silent refresh.
  */
 export async function ensureAccessToken(accessToken?: string | null): Promise<string> {
-  let token = getEffectiveAccessToken(accessToken);
-  if (!token) {
-    try {
-      console.log("OAuth token missing. Prompting Google Sign-In...");
-      const authResult = await googleSignIn();
-      if (authResult?.accessToken) {
-        token = authResult.accessToken;
-        localStorage.setItem("google_access_token", token);
-      }
-    } catch (err) {
-      console.error("Google OAuth login prompt failed:", err);
-    }
+  if (accessToken && accessToken.trim()) {
+    return accessToken;
   }
-  return token;
+  const validToken = await getValidAccessToken();
+  if (validToken) {
+    return validToken;
+  }
+  try {
+    console.log("[GoogleSheets] Access token missing or expired. Requesting Google OAuth Sign-In...");
+    const res = await requestGoogleOAuthSignIn();
+    return res.accessToken;
+  } catch (err: any) {
+    console.error("[GoogleSheets] Google OAuth login prompt error:", err);
+    throw new Error(
+      "Google OAuth access token missing. Please sign in with Google to perform sheet updates."
+    );
+  }
 }
 
 /**
@@ -120,7 +131,7 @@ export function formatRangeForUrl(range: string): string {
 }
 
 /**
- * Low-level sheet range updater with error throwing.
+ * Low-level sheet range updater with error throwing and 401 retry.
  */
 export async function updateSheetRange(
   arg1: string,
@@ -139,51 +150,54 @@ export async function updateSheetRange(
   }
 
   validateConfig(SPREADSHEET_ID);
-  let token = await ensureAccessToken(rawToken);
-  if (!token) {
-    console.error("Failure: Google OAuth access token missing");
-    throw new Error(
-      "Google OAuth access token missing. Please sign in with Google to perform sheet updates."
-    );
-  }
 
-  const formattedRange = formatRangeForUrl(range);
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${formattedRange}?valueInputOption=USER_ENTERED`;
+  return executeWithGoogleAuthRetry(async (token: string) => {
+    const formattedRange = formatRangeForUrl(range);
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${formattedRange}?valueInputOption=USER_ENTERED`;
 
-  logDev("updateSheetRange REQUEST", { range, formattedRange, valuesCount: values.length });
+    logDev("updateSheetRange REQUEST", { range, formattedRange, valuesCount: values.length });
 
-  const res = await fetch(url, {
-    method: "PUT",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ values })
-  });
+    const res = await fetch(url, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ values })
+    });
 
-  if (!res.ok) {
-    const errText = await res.text().catch(() => "");
-    let parseMessage = "";
-    try {
-      const parsed = JSON.parse(errText);
-      parseMessage = parsed?.error?.message || "";
-    } catch (_) {}
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      let parseMessage = "";
+      try {
+        const parsed = JSON.parse(errText);
+        parseMessage = parsed?.error?.message || "";
+      } catch (_) {}
 
-    const error = new Error(
-      `Failed to update sheet range '${range}': ${res.status} ${res.statusText}. ${parseMessage || errText}`
-    );
-    console.error("Failure:", error.message);
-    logDev("updateSheetRange ERROR", { range, formattedRange }, null, error);
-    throw error;
-  }
+      if (res.status === 401) {
+        throw new Error(`401 UNAUTHENTICATED: ${parseMessage || errText || "Token expired"}`);
+      }
 
-  const responseData = await res.json();
-  logDev("updateSheetRange SUCCESS", { range }, responseData);
-  return responseData;
+      if (res.status === 403) {
+        throw new Error(`403 PERMISSION_DENIED: ${parseMessage || errText || "Permission denied for target spreadsheet"}`);
+      }
+
+      const error = new Error(
+        `Failed to update sheet range '${range}': ${res.status} ${res.statusText}. ${parseMessage || errText}`
+      );
+      console.error("Failure:", error.message);
+      logDev("updateSheetRange ERROR", { range, formattedRange }, null, error);
+      throw error;
+    }
+
+    const responseData = await res.json();
+    logDev("updateSheetRange SUCCESS", { range }, responseData);
+    return responseData;
+  }, rawToken);
 }
 
 /**
- * Low-level sheet row appender with error throwing.
+ * Low-level sheet row appender with error throwing and 401 retry.
  */
 export async function appendSheetRowValues(
   sheetName: string,
@@ -191,50 +205,50 @@ export async function appendSheetRowValues(
   accessToken?: string | null
 ): Promise<any> {
   validateConfig(SPREADSHEET_ID);
-  const token = getEffectiveAccessToken(accessToken);
-  if (!token) {
-    throw new Error(
-      "Google OAuth access token missing. Please sign in with Google to perform sheet updates."
-    );
-  }
 
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(
-    sheetName
-  )}:append?valueInputOption=USER_ENTERED`;
+  return executeWithGoogleAuthRetry(async (token: string) => {
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(
+      sheetName
+    )}:append?valueInputOption=USER_ENTERED`;
 
-  logDev("appendSheetRowValues REQUEST", { sheetName, values });
+    logDev("appendSheetRowValues REQUEST", { sheetName, values });
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ values })
-  });
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ values })
+    });
 
-  if (!res.ok) {
-    const errText = await res.text().catch(() => "");
-    let parseMessage = "";
-    try {
-      const parsed = JSON.parse(errText);
-      parseMessage = parsed?.error?.message || "";
-    } catch (_) {}
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      let parseMessage = "";
+      try {
+        const parsed = JSON.parse(errText);
+        parseMessage = parsed?.error?.message || "";
+      } catch (_) {}
 
-    const error = new Error(
-      `Failed to append to sheet '${sheetName}': ${res.status} ${res.statusText}. ${parseMessage || errText}`
-    );
-    logDev("appendSheetRowValues ERROR", { sheetName }, null, error);
-    throw error;
-  }
+      if (res.status === 401) {
+        throw new Error(`401 UNAUTHENTICATED: ${parseMessage || errText || "Token expired"}`);
+      }
 
-  const responseData = await res.json();
-  logDev("appendSheetRowValues SUCCESS", { sheetName }, responseData);
-  return responseData;
+      const error = new Error(
+        `Failed to append to sheet '${sheetName}': ${res.status} ${res.statusText}. ${parseMessage || errText}`
+      );
+      logDev("appendSheetRowValues ERROR", { sheetName }, null, error);
+      throw error;
+    }
+
+    const responseData = await res.json();
+    logDev("appendSheetRowValues SUCCESS", { sheetName }, responseData);
+    return responseData;
+  }, accessToken);
 }
 
 /**
- * Low-level batch updater for multiple sheet ranges in a single HTTP request.
+ * Low-level batch updater for multiple sheet ranges in a single HTTP request with 401 retry.
  */
 export async function batchUpdateSheetRanges(
   data: { range: string; values: string[][] }[],
@@ -242,50 +256,50 @@ export async function batchUpdateSheetRanges(
 ): Promise<any> {
   if (!data || data.length === 0) return null;
   validateConfig(SPREADSHEET_ID);
-  const token = getEffectiveAccessToken(accessToken);
-  if (!token) {
-    throw new Error(
-      "Google OAuth access token missing. Please sign in with Google to perform sheet updates."
-    );
-  }
 
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values:batchUpdate`;
+  return executeWithGoogleAuthRetry(async (token: string) => {
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values:batchUpdate`;
 
-  logDev("batchUpdateSheetRanges REQUEST", {
-    itemCount: data.length,
-    ranges: data.map(d => d.range)
-  });
+    logDev("batchUpdateSheetRanges REQUEST", {
+      itemCount: data.length,
+      ranges: data.map(d => d.range)
+    });
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      valueInputOption: "USER_ENTERED",
-      data
-    })
-  });
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        valueInputOption: "USER_ENTERED",
+        data
+      })
+    });
 
-  if (!res.ok) {
-    const errText = await res.text().catch(() => "");
-    let parseMessage = "";
-    try {
-      const parsed = JSON.parse(errText);
-      parseMessage = parsed?.error?.message || "";
-    } catch (_) {}
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      let parseMessage = "";
+      try {
+        const parsed = JSON.parse(errText);
+        parseMessage = parsed?.error?.message || "";
+      } catch (_) {}
 
-    const error = new Error(
-      `Failed to batch update sheet ranges: ${res.status} ${res.statusText}. ${parseMessage || errText}`
-    );
-    logDev("batchUpdateSheetRanges ERROR", { ranges: data.map(d => d.range) }, null, error);
-    throw error;
-  }
+      if (res.status === 401) {
+        throw new Error(`401 UNAUTHENTICATED: ${parseMessage || errText || "Token expired"}`);
+      }
 
-  const responseData = await res.json();
-  logDev("batchUpdateSheetRanges SUCCESS", {}, responseData);
-  return responseData;
+      const error = new Error(
+        `Failed to batch update sheet ranges: ${res.status} ${res.statusText}. ${parseMessage || errText}`
+      );
+      logDev("batchUpdateSheetRanges ERROR", { ranges: data.map(d => d.range) }, null, error);
+      throw error;
+    }
+
+    const responseData = await res.json();
+    logDev("batchUpdateSheetRanges SUCCESS", {}, responseData);
+    return responseData;
+  }, accessToken);
 }
 
 /**

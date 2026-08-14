@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User } from "firebase/auth";
+import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User, signOut } from "firebase/auth";
 import { initializeFirestore, doc, getDocFromServer } from "firebase/firestore";
 import firebaseConfig from "../firebase-applet-config.json";
 
@@ -27,12 +27,14 @@ async function testConnection() {
 }
 testConnection();
 
-const provider = new GoogleAuthProvider();
+export const provider = new GoogleAuthProvider();
 provider.addScope("https://www.googleapis.com/auth/spreadsheets.readonly");
 provider.addScope("https://www.googleapis.com/auth/spreadsheets");
-
-let isSigningIn = false;
-let cachedAccessToken: string | null = localStorage.getItem("google_access_token");
+provider.addScope("https://www.googleapis.com/auth/drive.file");
+provider.addScope("https://www.googleapis.com/auth/drive.readonly");
+provider.setCustomParameters({
+  prompt: "select_account"
+});
 
 export const initAuth = (
   onAuthSuccess?: (user: User, token: string) => void,
@@ -40,17 +42,17 @@ export const initAuth = (
 ) => {
   return onAuthStateChanged(auth, async (user: User | null) => {
     if (user) {
-      if (!cachedAccessToken) {
-        cachedAccessToken = localStorage.getItem("google_access_token");
+      if (typeof window !== "undefined") {
+        const token = sessionStorage.getItem("ssk_google_oauth_token") || localStorage.getItem("google_access_token");
+        if (token && onAuthSuccess) {
+          onAuthSuccess(user, token);
+          return;
+        }
       }
-      if (cachedAccessToken) {
-        if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
-      } else if (!isSigningIn) {
-        cachedAccessToken = null;
-        if (onAuthFailure) onAuthFailure();
+      if (onAuthSuccess) {
+        onAuthSuccess(user, "");
       }
     } else {
-      cachedAccessToken = null;
       if (onAuthFailure) onAuthFailure();
     }
   });
@@ -58,33 +60,42 @@ export const initAuth = (
 
 export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
   try {
-    isSigningIn = true;
     const result = await signInWithPopup(auth, provider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     if (!credential?.accessToken) {
-      throw new Error("Failed to get access token from Firebase Auth");
+      throw new Error("Failed to get access token from Firebase Google Auth");
     }
 
-    cachedAccessToken = credential.accessToken;
-    localStorage.setItem("google_access_token", cachedAccessToken);
-    return { user: result.user, accessToken: cachedAccessToken };
+    const token = credential.accessToken;
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("ssk_google_oauth_token", token);
+      sessionStorage.setItem("ssk_google_oauth_expires_at", String(Date.now() + 3540 * 1000));
+      if (result.user?.email) {
+        sessionStorage.setItem("ssk_google_oauth_user_email", result.user.email);
+      }
+      localStorage.setItem("google_access_token", token);
+    }
+    return { user: result.user, accessToken: token };
   } catch (error: any) {
-    console.error("Sign in error:", error);
+    console.error("[Firebase] Sign in error:", error);
     throw error;
-  } finally {
-    isSigningIn = false;
   }
 };
 
 export const getAccessToken = async (): Promise<string | null> => {
-  if (!cachedAccessToken) {
-    cachedAccessToken = localStorage.getItem("google_access_token");
+  if (typeof window !== "undefined") {
+    const token = sessionStorage.getItem("ssk_google_oauth_token") || localStorage.getItem("google_access_token");
+    if (token) return token;
   }
-  return cachedAccessToken;
+  return null;
 };
 
 export const logoutUser = async () => {
-  await auth.signOut();
-  cachedAccessToken = null;
-  localStorage.removeItem("google_access_token");
+  await signOut(auth);
+  if (typeof window !== "undefined") {
+    sessionStorage.removeItem("ssk_google_oauth_token");
+    sessionStorage.removeItem("ssk_google_oauth_expires_at");
+    sessionStorage.removeItem("ssk_google_oauth_user_email");
+    localStorage.removeItem("google_access_token");
+  }
 };

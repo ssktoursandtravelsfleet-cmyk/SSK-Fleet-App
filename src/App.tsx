@@ -31,6 +31,7 @@ import { initAuth, googleSignIn, logoutUser } from "./firebase";
 import { fetchAndParseAllSheets, getCachedSheetsData, appendOnboardingDocuments, uploadBase64Image, appendDriverOnboardingData, checkMobileInDriverSheet, writePaymentLog, SPREADSHEET_ID, authenticateDriverWithSheet, updateLastLogin, updateDriverProfileInSheets, saveDriverDocumentsToSheet, saveDriverDocumentsToVerificationSheet, fetchDriverDocumentsFromSheet, resolveDriverDisplayName, markNotificationReadInSheet, getEffectiveToken } from "./lib/sheets";
 import { subscribeToDriverNotifications, markNotificationAsRead } from "./lib/notificationService";
 import { registerDriverFcmToken, triggerDeviceVibration, isNotifProcessed, markNotifAsProcessed, showSystemNotification, registerServiceWorker, requestNotificationPermission } from "./lib/fcmService";
+import { initPwaInstallManager, triggerNativePwaInstallPrompt, shouldPromptInstall } from "./lib/pwaInstall";
 import { DISPLAY_VERSION } from "./lib/version";
 
 export default function App() {
@@ -374,6 +375,33 @@ export default function App() {
       }
     }
   }, [isSplashFinished, pendingRedirect]);
+
+  // Mobile-Only Native PWA Installation Handler
+  useEffect(() => {
+    const cleanup = initPwaInstallManager(() => {
+      // If install event fires and splash is finished, trigger after smooth UI settlement delay
+      if (isSplashFinished && shouldPromptInstall()) {
+        const timer = setTimeout(() => {
+          triggerNativePwaInstallPrompt().catch((err) => {
+            console.log("[PWA INSTALL] Delayed auto-prompt handled:", err);
+          });
+        }, 2500);
+        return () => clearTimeout(timer);
+      }
+    });
+
+    // Check on splash finish if prompt was already captured
+    if (isSplashFinished && shouldPromptInstall()) {
+      const timer = setTimeout(() => {
+        triggerNativePwaInstallPrompt().catch((err) => {
+          console.log("[PWA INSTALL] Splash finish prompt handled:", err);
+        });
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+
+    return () => cleanup();
+  }, [isSplashFinished]);
 
   // Ref to track initial load vs real-time incoming push notifications
   const isInitialNotifLoadRef = React.useRef(true);

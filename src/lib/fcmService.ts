@@ -101,6 +101,42 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
 }
 
 /**
+ * Helper to test if an identifier is valid and not a placeholder like "N/A", "NA", "NULL", "NONE", "-"
+ */
+export function isValidDriverIdentifier(val?: string | null): boolean {
+  if (!val) return false;
+  const trimmed = String(val).trim().toUpperCase();
+  const invalidPlaceholders = new Set([
+    "",
+    "N/A",
+    "NA",
+    "NONE",
+    "NULL",
+    "UNDEFINED",
+    "-",
+    "--",
+    "UNKNOWN",
+    "N / A",
+    "NAN",
+    "ALL"
+  ]);
+  return !invalidPlaceholders.has(trimmed);
+}
+
+/**
+ * Sanitize a string so it is always a safe single-segment Firestore document ID (no forward or backward slashes)
+ */
+export function sanitizeFirestoreDocId(id: string): string {
+  if (!id) return "";
+  return id
+    .trim()
+    .replace(/[\/\\#?\[\]*]/g, "_")
+    .replace(/\s+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+/**
  * Get FCM Device Token and register it under the driver's ETM ID / Driver ID in Firestore `driver_tokens`
  */
 export async function registerDriverFcmToken(
@@ -108,11 +144,25 @@ export async function registerDriverFcmToken(
   driverMobile?: string,
   driverId?: string
 ): Promise<string | null> {
-  const cleanEtm = String(driverEtm || driverId || "").trim().toUpperCase();
+  const validEtm = isValidDriverIdentifier(driverEtm) ? String(driverEtm).trim().toUpperCase() : "";
+  const validId = isValidDriverIdentifier(driverId) ? String(driverId).trim().toUpperCase() : "";
   const cleanMobile = String(driverMobile || "").replace(/\D/g, "").slice(-10);
 
-  if (!cleanEtm && !cleanMobile) {
-    console.log("[FCM TOKEN] Cannot register FCM token: Missing driver identifiers.");
+  const bestIdentifier = validEtm || validId;
+  let docKey = "";
+
+  if (bestIdentifier) {
+    docKey = sanitizeFirestoreDocId(bestIdentifier);
+  } else if (cleanMobile && cleanMobile.length >= 10) {
+    docKey = `MOB_${cleanMobile}`;
+  }
+
+  if (!docKey) {
+    console.log("[FCM TOKEN] Cannot register FCM token: No valid driver identifier (ETM or 10-digit mobile) provided.", {
+      driverEtm,
+      driverId,
+      driverMobile
+    });
     return null;
   }
 
@@ -145,15 +195,14 @@ export async function registerDriverFcmToken(
       return null;
     }
 
-    console.log("[FCM TOKEN] Obtained FCM device token:", token, "for driver ETM:", cleanEtm);
+    console.log("[FCM TOKEN] Obtained FCM device token:", token, "for driver docKey:", docKey);
 
-    // Save/update token in Firestore `driver_tokens` collection
-    const docKey = cleanEtm || `MOB_${cleanMobile}`;
+    // Save/update token in Firestore `driver_tokens` collection with sanitized single-segment document ID
     const tokenRef = doc(db, "driver_tokens", docKey);
 
     await setDoc(tokenRef, {
-      driverId: cleanEtm,
-      etmId: cleanEtm,
+      driverId: bestIdentifier || `MOB_${cleanMobile}`,
+      etmId: validEtm || bestIdentifier || "",
       mobileNumber: cleanMobile,
       fcmToken: token,
       updatedAt: new Date().toISOString(),

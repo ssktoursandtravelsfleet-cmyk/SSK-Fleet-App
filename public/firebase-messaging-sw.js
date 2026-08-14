@@ -90,3 +90,23 @@ self.addEventListener('notificationclick', (event) => {
     })
   );
 });
+
+// PWA Lifecycle: install and activate
+self.addEventListener('install', (event) => {
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(clients.claim());
+});
+
+// PWA Fetch Handler for installability compliance
+self.addEventListener('fetch', (event) => {
+  // Let network handle request normally
+  event.respondWith(
+    fetch(event.request).catch(() => {
+      return caches.match(event.request);
+    })
+  );
+});
+

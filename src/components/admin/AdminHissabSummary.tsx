@@ -18,11 +18,19 @@ import {
   ChevronRight,
   FileText,
   AlertTriangle,
-  Filter
+  Filter,
+  ShieldCheck
 } from "lucide-react";
 import { DriverDetails } from "../../types";
 import { fetchHissabSummarySheet, clearSheetCache, SHEET_NAME_HISSAB_SUMMARY } from "../../lib/sheets";
 import { updateHissabSummaryCell, insertHissabSummaryRecordsAtTop, getColumnLetter } from "../../lib/googleSheets";
+import {
+  getGoogleAuthState,
+  onGoogleAuthStateChange,
+  requestGoogleOAuthSignIn,
+  GoogleAuthState,
+  getValidAccessToken
+} from "../../lib/googleAuth";
 
 interface AdminHissabSummaryProps {
   accessToken?: string | null;
@@ -42,6 +50,15 @@ interface AuditLog {
   colName: string;
   prevVal: string;
   newVal: string;
+}
+
+export interface UploadSuccessDetail {
+  targetSheet: string;
+  csvRows: number;
+  validRows: number;
+  newRecords: number;
+  duplicates: number;
+  rowsWritten: number;
 }
 
 /**
@@ -301,6 +318,37 @@ export default function AdminHissabSummary({
   const [isUploadingCsv, setIsUploadingCsv] = useState<boolean>(false);
   const [csvUploadMessage, setCsvUploadMessage] = useState<string>("");
   const [uploadErrorDetails, setUploadErrorDetails] = useState<UploadErrorDetail | null>(null);
+  const [uploadSuccessDetails, setUploadSuccessDetails] = useState<UploadSuccessDetail | null>(null);
+
+  // Google OAuth State Tracking
+  const [googleAuth, setGoogleAuth] = useState<GoogleAuthState>(getGoogleAuthState());
+  const [isConnectingGoogle, setIsConnectingGoogle] = useState<boolean>(false);
+
+  useEffect(() => {
+    const unsub = onGoogleAuthStateChange((state) => {
+      setGoogleAuth(state);
+    });
+    return () => unsub();
+  }, []);
+
+  const handleConnectGoogle = async () => {
+    try {
+      setIsConnectingGoogle(true);
+      const res = await requestGoogleOAuthSignIn({ prompt: "select_account" });
+      setToast({
+        type: "success",
+        text: `Google account connected successfully${res.email ? ` (${res.email})` : ""}!`
+      });
+    } catch (err: any) {
+      console.error("Google Auth connection error:", err);
+      setToast({
+        type: "error",
+        text: err?.message || "Failed to connect Google account."
+      });
+    } finally {
+      setIsConnectingGoogle(false);
+    }
+  };
 
   // Permissions check
   const isUserAuthorized = useMemo(() => {
@@ -588,7 +636,7 @@ export default function AdminHissabSummary({
       console.error("Google Sheet write failed:", err);
       setToast({
         type: "error",
-        text: "Unable to save changes to Google Sheet."
+        text: err?.message || "Unable to save changes to Google Sheet."
       });
     } finally {
       setIsSavingCell(false);
@@ -702,7 +750,8 @@ export default function AdminHissabSummary({
 
     setIsUploadingCsv(true);
     setUploadErrorDetails(null);
-    setCsvUploadMessage("Preparing Google Sheet write request for 'Hissab Summary'...");
+    setUploadSuccessDetails(null);
+    setCsvUploadMessage("Checking Google OAuth authorization...");
 
     const targetSheetHeaders = headers.length > 0 ? headers : EXPECTED_HISSAB_SUMMARY_HEADERS;
 
@@ -710,6 +759,20 @@ export default function AdminHissabSummary({
     console.log("[HISSAB CSV] Duplicate Strategy:", duplicateStrategy);
 
     try {
+      // Step 1: Ensure Google OAuth Access Token
+      let activeToken = accessToken || (await getValidAccessToken());
+      if (!activeToken) {
+        setCsvUploadMessage("Authenticating with Google OAuth to authorize Google Sheet write...");
+        const authResult = await requestGoogleOAuthSignIn({ prompt: "select_account" });
+        activeToken = authResult.accessToken;
+      }
+
+      if (!activeToken) {
+        throw new Error("Google OAuth access token missing. Please sign in with Google to perform sheet updates.");
+      }
+
+      setCsvUploadMessage("Processing records and detecting duplicates...");
+
       const existingKeyMap = new Map<string, number>();
       const existingDataRowsCopy = dataRecords.map((r) => [...r.values]);
 
@@ -767,13 +830,13 @@ export default function AdminHissabSummary({
         totalCombinedMatrixRows: combinedMatrix.length
       });
 
-      setCsvUploadMessage("Writing updated records to Google Sheet tab 'Hissab Summary'...");
+      setCsvUploadMessage(`Writing ${insertedNewCount} new records to top of Google Sheet tab '${SHEET_NAME_HISSAB_SUMMARY}'...`);
 
       const writeResponse = await insertHissabSummaryRecordsAtTop(
         targetSheetHeaders,
         newRecordsToInsertAtTop,
         existingDataRowsCopy,
-        accessToken
+        activeToken
       );
 
       console.log("[HISSAB CSV] Google Sheet Write Response:", writeResponse);
@@ -781,7 +844,7 @@ export default function AdminHissabSummary({
       // MANDATORY Post-Write Verification Readback
       setCsvUploadMessage("Verifying Google Sheet write output...");
       clearSheetCache();
-      const reFetchedData = await fetchHissabSummarySheet(accessToken, true);
+      const reFetchedData = await fetchHissabSummarySheet(activeToken, true);
 
       console.log("[HISSAB CSV] Post-Write Verification Re-Fetched Rows Count:", reFetchedData ? reFetchedData.length : 0);
 
@@ -793,15 +856,23 @@ export default function AdminHissabSummary({
 
       console.log("[HISSAB CSV] Verification Result: SUCCESS!");
 
+      const totalRowsWritten = insertedNewCount + updatedRecordsCount;
+      const successDetail: UploadSuccessDetail = {
+        targetSheet: SHEET_NAME_HISSAB_SUMMARY,
+        csvRows: csvRawRows.length,
+        validRows: csvMappedRows.length,
+        newRecords: insertedNewCount,
+        duplicates: duplicateCount,
+        rowsWritten: totalRowsWritten
+      };
+
+      setUploadSuccessDetails(successDetail);
+
       setToast({
         type: "success",
         text: `CSV Upload Successful: ${insertedNewCount} new records added at top, ${updatedRecordsCount} existing records updated${skippedRecordsCount > 0 ? `, ${skippedRecordsCount} duplicates skipped` : ""}. Verification passed.`
       });
 
-      setShowCsvModal(false);
-      setCsvFile(null);
-      setCsvMappedRows([]);
-      setUploadErrorDetails(null);
       await loadData(true);
     } catch (err: any) {
       const errMsg = err?.message || String(err) || "Unknown error occurred writing to Google Sheet.";
@@ -882,6 +953,34 @@ export default function AdminHissabSummary({
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2.5 flex-wrap">
+            {/* Google OAuth Connection Badge */}
+            <div className={`px-3 py-2 rounded-2xl border flex items-center gap-2 text-xs font-semibold ${
+              googleAuth.isAuthenticated
+                ? "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60"
+                : "bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800/60"
+            }`}>
+              <div className={`w-2 h-2 rounded-full shrink-0 ${googleAuth.isAuthenticated ? "bg-emerald-500 shadow-xs" : "bg-amber-500 animate-pulse"}`} />
+              <span className="hidden sm:inline">
+                {googleAuth.isAuthenticated
+                  ? `Google Sheets: ${googleAuth.userEmail || "Connected"}`
+                  : "Google OAuth: Not Connected"}
+              </span>
+              <span className="sm:hidden">
+                {googleAuth.isAuthenticated ? "Connected" : "Not Connected"}
+              </span>
+              {!googleAuth.isAuthenticated && (
+                <button
+                  type="button"
+                  onClick={handleConnectGoogle}
+                  disabled={isConnectingGoogle}
+                  className="ml-1 text-[11px] font-bold text-amber-700 dark:text-amber-300 underline hover:text-amber-900 dark:hover:text-amber-100 cursor-pointer flex items-center gap-1"
+                >
+                  {isConnectingGoogle && <RefreshCw className="w-3 h-3 animate-spin" />}
+                  <span>{isConnectingGoogle ? "Connecting..." : "Sign In"}</span>
+                </button>
+              )}
+            </div>
+
             {lastRefreshed && (
               <span className="text-[11px] text-slate-400 dark:text-slate-500 font-medium hidden lg:inline-block mr-1">
                 Synced: {lastRefreshed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
@@ -1431,6 +1530,8 @@ export default function AdminHissabSummary({
                   setCsvMappedRows([]);
                   setMissingHeaders([]);
                   setExtraHeaders([]);
+                  setUploadErrorDetails(null);
+                  setUploadSuccessDetails(null);
                 }}
                 disabled={isUploadingCsv}
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 cursor-pointer"
@@ -1439,8 +1540,78 @@ export default function AdminHissabSummary({
               </button>
             </div>
 
-            {/* File Selection Box */}
-            {!csvFile ? (
+            {/* Google OAuth Authorization Banner inside Modal */}
+            <div className={`p-3 rounded-2xl border flex items-center justify-between gap-3 text-xs ${
+              googleAuth.isAuthenticated
+                ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800"
+                : "bg-amber-50 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200 border-amber-200 dark:border-amber-800"
+            }`}>
+              <div className="flex items-center gap-2">
+                <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${googleAuth.isAuthenticated ? "bg-emerald-500" : "bg-amber-500 animate-pulse"}`} />
+                <span className="font-semibold">
+                  {googleAuth.isAuthenticated
+                    ? `Google Sheets Authorized${googleAuth.userEmail ? ` (${googleAuth.userEmail})` : ""}`
+                    : "Google Sheets Authorization: Required for writing updates"}
+                </span>
+              </div>
+              {!googleAuth.isAuthenticated && (
+                <button
+                  type="button"
+                  onClick={handleConnectGoogle}
+                  disabled={isConnectingGoogle}
+                  className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] shadow-xs cursor-pointer flex items-center gap-1.5 shrink-0"
+                >
+                  {isConnectingGoogle && <RefreshCw className="w-3 h-3 animate-spin" />}
+                  <span>Sign In with Google</span>
+                </button>
+              )}
+            </div>
+
+            {/* Upload Pipeline Success Display */}
+            {uploadSuccessDetails ? (
+              <div className="space-y-4 animate-fade-in">
+                <div className="bg-emerald-50 dark:bg-emerald-950/90 border border-emerald-300 dark:border-emerald-800 p-5 rounded-2xl text-emerald-900 dark:text-emerald-100 space-y-3">
+                  <div className="flex items-center gap-2 font-black text-sm text-emerald-700 dark:text-emerald-300">
+                    <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0" />
+                    <span>CSV Upload & Google Sheet Write Successful!</span>
+                  </div>
+
+                  <p className="text-xs text-emerald-800 dark:text-emerald-200">
+                    All valid records have been verified and written to Google Sheet <span className="font-bold underline">{uploadSuccessDetails.targetSheet}</span> at the top.
+                  </p>
+
+                  <div className="text-xs space-y-1.5 font-mono text-emerald-800 dark:text-emerald-200 bg-white/70 dark:bg-black/30 p-3.5 rounded-xl border border-emerald-200 dark:border-emerald-900">
+                    <p><span className="font-bold text-slate-700 dark:text-slate-300">Target Sheet:</span> {uploadSuccessDetails.targetSheet}</p>
+                    <p><span className="font-bold text-slate-700 dark:text-slate-300">Total CSV Rows:</span> {uploadSuccessDetails.csvRows}</p>
+                    <p><span className="font-bold text-slate-700 dark:text-slate-300">Valid Mapped Rows:</span> {uploadSuccessDetails.validRows}</p>
+                    <p><span className="font-bold text-slate-700 dark:text-slate-300">New Records Inserted at Top:</span> {uploadSuccessDetails.newRecords}</p>
+                    <p><span className="font-bold text-slate-700 dark:text-slate-300">Duplicates Handled:</span> {uploadSuccessDetails.duplicates}</p>
+                    <p><span className="font-bold text-emerald-700 dark:text-emerald-300">Total Rows Written / Verified:</span> {uploadSuccessDetails.rowsWritten}</p>
+                    <p><span className="font-bold text-emerald-700 dark:text-emerald-300">Google Sheet Verification:</span> PASSED ✓</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCsvModal(false);
+                      setCsvFile(null);
+                      setCsvMappedRows([]);
+                      setMissingHeaders([]);
+                      setExtraHeaders([]);
+                      setUploadErrorDetails(null);
+                      setUploadSuccessDetails(null);
+                    }}
+                    className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold shadow-md transition-all cursor-pointer flex items-center gap-2"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Done & Close</span>
+                  </button>
+                </div>
+              </div>
+            ) : !csvFile ? (
+              /* File Selection Box */
               <div className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl p-8 text-center space-y-3 hover:border-emerald-500 transition-colors">
                 <div className="w-12 h-12 mx-auto rounded-full bg-emerald-50 dark:bg-emerald-950 text-emerald-600 flex items-center justify-center">
                   <FileText className="w-6 h-6" />
