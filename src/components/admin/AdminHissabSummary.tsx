@@ -251,7 +251,7 @@ interface DateRangePickerProps {
 /**
  * Interactive Date Range Calendar Dropdown Component
  */
-function DateRangePicker({
+export function DateRangePicker({
   value,
   onChange,
   placeholder = "Filter Date (DD/MM/YYYY)..."

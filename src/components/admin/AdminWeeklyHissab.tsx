@@ -23,6 +23,11 @@ import {
   getWeekKey,
   PublishedWeekRecord
 } from "../../lib/publishedWeeksService";
+import {
+  DateRangePicker,
+  parseDateToCalendarMidnight,
+  parseDateRangeFromFilter
+} from "./AdminHissabSummary";
 
 interface AdminWeeklyHissabProps {
   accessToken?: string | null;
@@ -377,14 +382,82 @@ export default function AdminWeeklyHissab({
         }
       }
 
-      // 4. Date Filter
+      // 4. Inclusive Date Range Filter
       if (dateSearch.trim()) {
-        const query = dateSearch.trim().toLowerCase();
-        const sDate = colIndices.startDateIdx !== -1 ? String(row[colIndices.startDateIdx] || "").toLowerCase() : "";
-        const eDate = colIndices.endDateIdx !== -1 ? String(row[colIndices.endDateIdx] || "").toLowerCase() : "";
-        const rowText = row.slice(0, 4).join(" ").toLowerCase();
-        if (!sDate.includes(query) && !eDate.includes(query) && !rowText.includes(query)) {
-          return false;
+        const parsedRange = parseDateRangeFromFilter(dateSearch);
+
+        if (parsedRange) {
+          const { start: rangeStart, end: rangeEnd } = parsedRange;
+          const rangeStartMs = rangeStart.getTime();
+          const rangeEndMs = rangeEnd.getTime();
+
+          const startVal = colIndices.startDateIdx !== -1 && row[colIndices.startDateIdx] ? row[colIndices.startDateIdx] : "";
+          const endVal = colIndices.endDateIdx !== -1 && row[colIndices.endDateIdx] ? row[colIndices.endDateIdx] : "";
+
+          const rowStart = parseDateToCalendarMidnight(startVal);
+          const rowEnd = parseDateToCalendarMidnight(endVal);
+
+          let matched = false;
+
+          // 1. If row has both Start Date and End Date (a date range / weekly period)
+          if (rowStart && rowEnd) {
+            const minD = rowStart.getTime() <= rowEnd.getTime() ? rowStart.getTime() : rowEnd.getTime();
+            const maxD = rowStart.getTime() <= rowEnd.getTime() ? rowEnd.getTime() : rowStart.getTime();
+            if (minD <= rangeEndMs && maxD >= rangeStartMs) {
+              matched = true;
+            }
+          }
+          // 2. If row has only Start Date
+          else if (rowStart) {
+            if (rowStart.getTime() >= rangeStartMs && rowStart.getTime() <= rangeEndMs) {
+              matched = true;
+            }
+          }
+          // 3. If row has only End Date
+          else if (rowEnd) {
+            if (rowEnd.getTime() >= rangeStartMs && rowEnd.getTime() <= rangeEndMs) {
+              matched = true;
+            }
+          }
+
+          // 4. Check any column in the row for a date falling in [rangeStart, rangeEnd]
+          if (!matched) {
+            for (let c = 0; c < row.length; c++) {
+              const h = headers[c] ? String(headers[c]).toLowerCase() : "";
+              const cellVal = row[c];
+              if (cellVal && (h.includes("date") || h.includes("day") || h.includes("period") || c <= 3)) {
+                const d = parseDateToCalendarMidnight(cellVal);
+                if (d && d.getTime() >= rangeStartMs && d.getTime() <= rangeEndMs) {
+                  matched = true;
+                  break;
+                }
+              }
+            }
+          }
+
+          // 5. Fallback substring matching if dates were unparseable text
+          if (!matched) {
+            const q = dateSearch.trim().toLowerCase();
+            const sStr = String(startVal).toLowerCase();
+            const eStr = String(endVal).toLowerCase();
+            const rowText = row.slice(0, 4).join(" ").toLowerCase();
+            if (sStr.includes(q) || eStr.includes(q) || rowText.includes(q)) {
+              matched = true;
+            }
+          }
+
+          if (!matched) {
+            return false;
+          }
+        } else {
+          // Fallback simple search if filter string is not a date range
+          const query = dateSearch.trim().toLowerCase();
+          const sDate = colIndices.startDateIdx !== -1 ? String(row[colIndices.startDateIdx] || "").toLowerCase() : "";
+          const eDate = colIndices.endDateIdx !== -1 ? String(row[colIndices.endDateIdx] || "").toLowerCase() : "";
+          const rowText = row.slice(0, 4).join(" ").toLowerCase();
+          if (!sDate.includes(query) && !eDate.includes(query) && !rowText.includes(query)) {
+            return false;
+          }
         }
       }
 
@@ -708,16 +781,11 @@ export default function AdminWeeklyHissab({
           {/* Filter 4: Date Filter */}
           <div className="flex flex-col gap-1">
             <label className="text-[10px] font-extrabold uppercase text-slate-400">Date Filter</label>
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="DD/MM/YYYY or date..."
-                value={dateSearch}
-                onChange={(e) => setDateSearch(e.target.value)}
-                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 py-2 pl-8 pr-2.5 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-              />
-              <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400" />
-            </div>
+            <DateRangePicker
+              value={dateSearch}
+              onChange={(val) => setDateSearch(val)}
+              placeholder="Filter Date (DD/MM/YYYY)..."
+            />
           </div>
 
           {/* Filter 5: Status Filter */}
