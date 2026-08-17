@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { 
   RefreshCw, 
   Search, 
@@ -18,7 +18,8 @@ import {
   ChevronRight,
   AlertTriangle,
   Filter,
-  ShieldCheck
+  ShieldCheck,
+  Calendar
 } from "lucide-react";
 import { DriverDetails } from "../../types";
 import { fetchHissabSummarySheet, clearSheetCache, SHEET_NAME_HISSAB_SUMMARY } from "../../lib/sheets";
@@ -136,6 +137,500 @@ export const EDITABLE_FINANCIAL_COLUMNS = new Set([
   "Car QR Code Amount",
   "OS"
 ]);
+
+/**
+ * Formats a Date object to standard DD/MM/YYYY string
+ */
+export function formatDateDDMMYYYY(d: Date): string {
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+}
+
+/**
+ * Parses any date representation into a midnight Date object (hours/minutes/seconds = 0)
+ * Supports DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY, YYYY-MM-DD, ISO timestamps, text month names
+ */
+export function parseDateToCalendarMidnight(val: any): Date | null {
+  if (val === null || val === undefined) return null;
+  if (val instanceof Date) {
+    if (isNaN(val.getTime())) return null;
+    return new Date(val.getFullYear(), val.getMonth(), val.getDate(), 0, 0, 0, 0);
+  }
+  const s = String(val).trim();
+  if (!s || s === "-" || s === "N/A" || s === "null" || s === "undefined") return null;
+
+  // 1. Check YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS or YYYY/MM/DD
+  const ymdMatch = s.match(/^(\d{4})[-\/\.](\d{1,2})[-\/\.](\d{1,2})/);
+  if (ymdMatch) {
+    const year = parseInt(ymdMatch[1], 10);
+    const month = parseInt(ymdMatch[2], 10) - 1;
+    const day = parseInt(ymdMatch[3], 10);
+    const d = new Date(year, month, day, 0, 0, 0, 0);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  // 2. Check DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
+  const dmyMatch = s.match(/^(\d{1,2})[-\/\.](\d{1,2})[-\/\.](\d{2,4})/);
+  if (dmyMatch) {
+    const day = parseInt(dmyMatch[1], 10);
+    const month = parseInt(dmyMatch[2], 10) - 1;
+    let year = parseInt(dmyMatch[3], 10);
+    if (year < 100) year += 2000;
+    const d = new Date(year, month, day, 0, 0, 0, 0);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  // 3. Check DD Mon YYYY like "10 Aug 2026" or "10-Aug-2026"
+  const monthNames: Record<string, number> = {
+    jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+    jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11
+  };
+  const textMonthMatch = s.match(/^(\d{1,2})[-\s/]+([a-zA-Z]{3,9})[-\s/]+(\d{2,4})/);
+  if (textMonthMatch) {
+    const day = parseInt(textMonthMatch[1], 10);
+    const monStr = textMonthMatch[2].toLowerCase().substring(0, 3);
+    let year = parseInt(textMonthMatch[3], 10);
+    if (year < 100) year += 2000;
+    if (monStr in monthNames) {
+      const d = new Date(year, monthNames[monStr], day, 0, 0, 0, 0);
+      if (!isNaN(d.getTime())) return d;
+    }
+  }
+
+  // 4. Fallback to standard JS Date parsing
+  const parsed = new Date(s);
+  if (!isNaN(parsed.getTime())) {
+    return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate(), 0, 0, 0, 0);
+  }
+
+  return null;
+}
+
+/**
+ * Parses user input filter string into a start and end Date range
+ * Supports "10/08/2026 – 16/08/2026", "10/08/2026 - 16/08/2026", "10/08/2026 to 16/08/2026", "10/08/2026"
+ */
+export function parseDateRangeFromFilter(filterStr: string): { start: Date; end: Date } | null {
+  if (!filterStr || !filterStr.trim()) return null;
+  const s = filterStr.trim();
+
+  // Match en-dash –, em-dash —, hyphen surrounded by spaces or "to", commas, semicolons
+  const separators = /[\u2013\u2014–]|(?:\s+to\s+)|(?:\s+-\s+)|(?:\s*;\s*)|(?:\s*,\s*)/i;
+  const parts = s.split(separators).map((p) => p.trim()).filter(Boolean);
+
+  if (parts.length >= 2) {
+    const start = parseDateToCalendarMidnight(parts[0]);
+    const end = parseDateToCalendarMidnight(parts[1]);
+    if (start && end) {
+      return start.getTime() <= end.getTime() ? { start, end } : { start: end, end: start };
+    }
+    if (start && !end) {
+      return { start, end: start };
+    }
+    if (!start && end) {
+      return { start: end, end };
+    }
+  } else if (parts.length === 1) {
+    const single = parseDateToCalendarMidnight(parts[0]);
+    if (single) {
+      return { start: single, end: single };
+    }
+  }
+
+  return null;
+}
+
+interface DateRangePickerProps {
+  value: string;
+  onChange: (val: string) => void;
+  placeholder?: string;
+}
+
+/**
+ * Interactive Date Range Calendar Dropdown Component
+ */
+function DateRangePicker({
+  value,
+  onChange,
+  placeholder = "Filter Date (DD/MM/YYYY)..."
+}: DateRangePickerProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const parsedRange = useMemo(() => parseDateRangeFromFilter(value), [value]);
+
+  const [rangeStart, setRangeStart] = useState<Date | null>(() => parsedRange?.start || null);
+  const [rangeEnd, setRangeEnd] = useState<Date | null>(() => parsedRange?.end || null);
+  const [hoverDate, setHoverDate] = useState<Date | null>(null);
+
+  // Viewing month in the calendar popover
+  const [viewDate, setViewDate] = useState<Date>(() => {
+    if (parsedRange?.start) {
+      return new Date(parsedRange.start.getFullYear(), parsedRange.start.getMonth(), 1);
+    }
+    return new Date();
+  });
+
+  // Sync internal state when external value changes
+  useEffect(() => {
+    const pr = parseDateRangeFromFilter(value);
+    if (pr) {
+      setRangeStart(pr.start);
+      setRangeEnd(pr.end);
+      setViewDate(new Date(pr.start.getFullYear(), pr.start.getMonth(), 1));
+    } else if (!value.trim()) {
+      setRangeStart(null);
+      setRangeEnd(null);
+    }
+  }, [value]);
+
+  // Click outside listener
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isOpen]);
+
+  const handlePrevMonth = () => {
+    setViewDate((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+  };
+
+  const handleNextMonth = () => {
+    setViewDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+  };
+
+  const handleDateClick = (clickedDate: Date) => {
+    const normalized = parseDateToCalendarMidnight(clickedDate);
+    if (!normalized) return;
+
+    if (!rangeStart || (rangeStart && rangeEnd)) {
+      // First click: select start date
+      setRangeStart(normalized);
+      setRangeEnd(null);
+    } else {
+      // Second click: select end date and apply
+      let start = rangeStart;
+      let end = normalized;
+      if (end.getTime() < start.getTime()) {
+        const temp = start;
+        start = end;
+        end = temp;
+      }
+      setRangeStart(start);
+      setRangeEnd(end);
+      const formatted = `${formatDateDDMMYYYY(start)} – ${formatDateDDMMYYYY(end)}`;
+      onChange(formatted);
+      setIsOpen(false);
+    }
+  };
+
+  const handleClear = () => {
+    setRangeStart(null);
+    setRangeEnd(null);
+    setHoverDate(null);
+    onChange("");
+    setIsOpen(false);
+  };
+
+  // Quick preset shortcuts
+  const handlePresetThisWeek = () => {
+    const today = new Date();
+    const day = today.getDay(); // 0: Sun, 1: Mon...
+    const diffToMonday = today.getDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(today.getFullYear(), today.getMonth(), diffToMonday, 0, 0, 0, 0);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+
+    setRangeStart(monday);
+    setRangeEnd(sunday);
+    setViewDate(new Date(monday.getFullYear(), monday.getMonth(), 1));
+    onChange(`${formatDateDDMMYYYY(monday)} – ${formatDateDDMMYYYY(sunday)}`);
+    setIsOpen(false);
+  };
+
+  const handlePresetLastWeek = () => {
+    const today = new Date();
+    const day = today.getDay();
+    const diffToPrevMonday = today.getDate() - day - 6 + (day === 0 ? -6 : 1);
+    const monday = new Date(today.getFullYear(), today.getMonth(), diffToPrevMonday, 0, 0, 0, 0);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+
+    setRangeStart(monday);
+    setRangeEnd(sunday);
+    setViewDate(new Date(monday.getFullYear(), monday.getMonth(), 1));
+    onChange(`${formatDateDDMMYYYY(monday)} – ${formatDateDDMMYYYY(sunday)}`);
+    setIsOpen(false);
+  };
+
+  const handlePresetThisMonth = () => {
+    const today = new Date();
+    const start = new Date(today.getFullYear(), today.getMonth(), 1, 0, 0, 0, 0);
+    const end = new Date(today.getFullYear(), today.getMonth() + 1, 0, 0, 0, 0);
+
+    setRangeStart(start);
+    setRangeEnd(end);
+    setViewDate(new Date(start.getFullYear(), start.getMonth(), 1));
+    onChange(`${formatDateDDMMYYYY(start)} – ${formatDateDDMMYYYY(end)}`);
+    setIsOpen(false);
+  };
+
+  // Build calendar matrix
+  const calendarDays = useMemo(() => {
+    const year = viewDate.getFullYear();
+    const month = viewDate.getMonth();
+
+    const firstDayOfMonth = new Date(year, month, 1);
+    const lastDayOfMonth = new Date(year, month + 1, 0);
+    const totalDays = lastDayOfMonth.getDate();
+
+    // Monday first: 0: Mon, ... 6: Sun
+    const firstDayIndex = (firstDayOfMonth.getDay() + 6) % 7;
+
+    const days: {
+      date: Date;
+      isCurrentMonth: boolean;
+      isToday: boolean;
+      isStart: boolean;
+      isEnd: boolean;
+      isInRange: boolean;
+    }[] = [];
+
+    const todayMid = parseDateToCalendarMidnight(new Date())?.getTime() || 0;
+
+    const sTime = rangeStart?.getTime() || null;
+    const eTime = rangeEnd?.getTime() || (rangeStart && hoverDate ? hoverDate.getTime() : null);
+    const effectiveStart = sTime && eTime ? Math.min(sTime, eTime) : sTime;
+    const effectiveEnd = sTime && eTime ? Math.max(sTime, eTime) : (rangeEnd ? rangeEnd.getTime() : sTime);
+
+    // Prev month padding
+    const prevMonthLastDay = new Date(year, month, 0).getDate();
+    for (let i = firstDayIndex - 1; i >= 0; i--) {
+      const d = new Date(year, month - 1, prevMonthLastDay - i, 0, 0, 0, 0);
+      const dTime = d.getTime();
+      days.push({
+        date: d,
+        isCurrentMonth: false,
+        isToday: dTime === todayMid,
+        isStart: sTime !== null && dTime === sTime,
+        isEnd: rangeEnd !== null && dTime === rangeEnd.getTime(),
+        isInRange: effectiveStart !== null && effectiveEnd !== null && dTime >= effectiveStart && dTime <= effectiveEnd
+      });
+    }
+
+    // Current month
+    for (let dayNum = 1; dayNum <= totalDays; dayNum++) {
+      const d = new Date(year, month, dayNum, 0, 0, 0, 0);
+      const dTime = d.getTime();
+      days.push({
+        date: d,
+        isCurrentMonth: true,
+        isToday: dTime === todayMid,
+        isStart: sTime !== null && dTime === sTime,
+        isEnd: rangeEnd !== null && dTime === rangeEnd.getTime(),
+        isInRange: effectiveStart !== null && effectiveEnd !== null && dTime >= effectiveStart && dTime <= effectiveEnd
+      });
+    }
+
+    // Next month padding
+    const remaining = (7 - (days.length % 7)) % 7;
+    for (let i = 1; i <= remaining; i++) {
+      const d = new Date(year, month + 1, i, 0, 0, 0, 0);
+      const dTime = d.getTime();
+      days.push({
+        date: d,
+        isCurrentMonth: false,
+        isToday: dTime === todayMid,
+        isStart: sTime !== null && dTime === sTime,
+        isEnd: rangeEnd !== null && dTime === rangeEnd.getTime(),
+        isInRange: effectiveStart !== null && effectiveEnd !== null && dTime >= effectiveStart && dTime <= effectiveEnd
+      });
+    }
+
+    return days;
+  }, [viewDate, rangeStart, rangeEnd, hoverDate]);
+
+  const monthNames = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setIsOpen(!isOpen)}
+          className="w-full pl-8 pr-7 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-left text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center justify-between cursor-pointer truncate"
+        >
+          <Calendar className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 shrink-0 pointer-events-none" />
+          <span className={`truncate font-medium ${value ? "text-slate-800 dark:text-white font-semibold" : "text-slate-400"}`}>
+            {value || placeholder}
+          </span>
+        </button>
+
+        {value && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleClear();
+            }}
+            title="Clear date filter"
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-600 transition-colors p-0.5 cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+
+      {/* Calendar Popover */}
+      {isOpen && (
+        <div className="absolute top-full left-0 mt-1.5 z-50 w-72 sm:w-80 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-xl p-3 space-y-3">
+          {/* Quick Presets */}
+          <div className="flex items-center gap-1.5 pb-2 border-b border-slate-100 dark:border-slate-800 flex-wrap">
+            <button
+              type="button"
+              onClick={handlePresetThisWeek}
+              className="px-2 py-1 rounded-lg text-[11px] font-bold bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 transition-colors cursor-pointer"
+            >
+              This Week
+            </button>
+            <button
+              type="button"
+              onClick={handlePresetLastWeek}
+              className="px-2 py-1 rounded-lg text-[11px] font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
+            >
+              Last Week
+            </button>
+            <button
+              type="button"
+              onClick={handlePresetThisMonth}
+              className="px-2 py-1 rounded-lg text-[11px] font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
+            >
+              This Month
+            </button>
+            {value && (
+              <button
+                type="button"
+                onClick={handleClear}
+                className="ml-auto px-2 py-1 rounded-lg text-[11px] font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+
+          {/* Month & Year Navigation */}
+          <div className="flex items-center justify-between px-1">
+            <h4 className="text-xs font-bold text-slate-800 dark:text-white">
+              {monthNames[viewDate.getMonth()]} {viewDate.getFullYear()}
+            </h4>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={handlePrevMonth}
+                className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 cursor-pointer"
+                title="Previous Month"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={handleNextMonth}
+                className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 cursor-pointer"
+                title="Next Month"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Day of Week Headers */}
+          <div className="grid grid-cols-7 text-center text-[10px] font-bold text-slate-400">
+            <div>Mo</div>
+            <div>Tu</div>
+            <div>We</div>
+            <div>Th</div>
+            <div>Fr</div>
+            <div>Sa</div>
+            <div>Su</div>
+          </div>
+
+          {/* Days Grid */}
+          <div className="grid grid-cols-7 gap-y-1 text-center text-xs">
+            {calendarDays.map((day, idx) => {
+              const isSelectedEndpoint = day.isStart || day.isEnd;
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => handleDateClick(day.date)}
+                  onMouseEnter={() => {
+                    if (rangeStart && !rangeEnd) {
+                      setHoverDate(day.date);
+                    }
+                  }}
+                  className={`relative py-1.5 text-xs font-semibold transition-colors cursor-pointer flex flex-col items-center justify-center ${
+                    !day.isCurrentMonth
+                      ? "text-slate-300 dark:text-slate-600"
+                      : "text-slate-700 dark:text-slate-200"
+                  } ${
+                    isSelectedEndpoint
+                      ? "bg-blue-600 text-white font-bold rounded-lg z-10 shadow-xs"
+                      : day.isInRange
+                      ? "bg-blue-50 dark:bg-blue-950/70 text-blue-900 dark:text-blue-200 rounded-none font-bold"
+                      : "hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
+                  }`}
+                >
+                  <span>{day.date.getDate()}</span>
+                  {day.isToday && !isSelectedEndpoint && (
+                    <span className="w-1 h-1 rounded-full bg-blue-600 mt-0.5" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Helper / Footer */}
+          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px]">
+            <span className="text-slate-500 font-medium truncate">
+              {rangeStart && !rangeEnd
+                ? "Select end date..."
+                : rangeStart && rangeEnd
+                ? `${formatDateDDMMYYYY(rangeStart)} – ${formatDateDDMMYYYY(rangeEnd)}`
+                : "Click start date"}
+            </span>
+            {rangeStart && !rangeEnd && (
+              <button
+                type="button"
+                onClick={() => {
+                  setRangeEnd(rangeStart);
+                  const formatted = `${formatDateDDMMYYYY(rangeStart)} – ${formatDateDDMMYYYY(rangeStart)}`;
+                  onChange(formatted);
+                  setIsOpen(false);
+                }}
+                className="text-blue-600 dark:text-blue-400 font-bold hover:underline cursor-pointer"
+              >
+                Single Day
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /**
  * Normalizes dates for comparison (DD/MM/YYYY or YYYY-MM-DD to standard DD/MM/YYYY)
@@ -512,14 +1007,65 @@ export default function AdminHissabSummary({
       });
     }
 
-    // Date Filter (matches Start Date or End Date)
+    // Inclusive Date Range Filter
     if (filterDate.trim()) {
-      const qDate = filterDate.trim().toLowerCase();
-      result = result.filter((rec) => {
-        const startVal = startDateIdx >= 0 && rec.values[startDateIdx] ? String(rec.values[startDateIdx]).trim().toLowerCase() : "";
-        const endVal = endDateIdx >= 0 && rec.values[endDateIdx] ? String(rec.values[endDateIdx]).trim().toLowerCase() : "";
-        return startVal.includes(qDate) || endVal.includes(qDate);
-      });
+      const parsedRange = parseDateRangeFromFilter(filterDate);
+
+      if (parsedRange) {
+        const { start: rangeStart, end: rangeEnd } = parsedRange;
+        const rangeStartMs = rangeStart.getTime();
+        const rangeEndMs = rangeEnd.getTime();
+
+        result = result.filter((rec) => {
+          const startVal = startDateIdx >= 0 && rec.values[startDateIdx] ? rec.values[startDateIdx] : "";
+          const endVal = endDateIdx >= 0 && rec.values[endDateIdx] ? rec.values[endDateIdx] : "";
+
+          const recStart = parseDateToCalendarMidnight(startVal);
+          const recEnd = parseDateToCalendarMidnight(endVal);
+
+          // 1. If both Start Date and End Date exist in the row (e.g. weekly period or date span)
+          if (recStart && recEnd) {
+            const minD = recStart.getTime() <= recEnd.getTime() ? recStart.getTime() : recEnd.getTime();
+            const maxD = recStart.getTime() <= recEnd.getTime() ? recEnd.getTime() : recStart.getTime();
+            return minD <= rangeEndMs && maxD >= rangeStartMs;
+          }
+
+          // 2. If only Start Date exists
+          if (recStart) {
+            return recStart.getTime() >= rangeStartMs && recStart.getTime() <= rangeEndMs;
+          }
+
+          // 3. If only End Date exists
+          if (recEnd) {
+            return recEnd.getTime() >= rangeStartMs && recEnd.getTime() <= rangeEndMs;
+          }
+
+          // 4. Check any column whose header contains "date"
+          for (let c = 0; c < rec.values.length; c++) {
+            const h = headers[c] ? normalizeHeader(headers[c]) : "";
+            if (h.includes("date") && rec.values[c]) {
+              const d = parseDateToCalendarMidnight(rec.values[c]);
+              if (d && d.getTime() >= rangeStartMs && d.getTime() <= rangeEndMs) {
+                return true;
+              }
+            }
+          }
+
+          // 5. Fallback substring matching if dates were unparseable text
+          const q = filterDate.trim().toLowerCase();
+          const sStr = String(startVal).toLowerCase();
+          const eStr = String(endVal).toLowerCase();
+          return sStr.includes(q) || eStr.includes(q);
+        });
+      } else {
+        // Fallback search when filter text is not a formatted date range
+        const qDate = filterDate.trim().toLowerCase();
+        result = result.filter((rec) => {
+          const startVal = startDateIdx >= 0 && rec.values[startDateIdx] ? String(rec.values[startDateIdx]).trim().toLowerCase() : "";
+          const endVal = endDateIdx >= 0 && rec.values[endDateIdx] ? String(rec.values[endDateIdx]).trim().toLowerCase() : "";
+          return startVal.includes(qDate) || endVal.includes(qDate);
+        });
+      }
     }
 
     // Partner ETM Filter
@@ -1096,12 +1642,10 @@ export default function AdminHissabSummary({
 
             {/* Filter by Date */}
             <div>
-              <input
-                type="text"
+              <DateRangePicker
                 value={filterDate}
-                onChange={(e) => setFilterDate(e.target.value)}
+                onChange={(val) => setFilterDate(val)}
                 placeholder="Filter Date (DD/MM/YYYY)..."
-                className="w-full px-2.5 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
 
